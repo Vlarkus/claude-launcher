@@ -4,7 +4,6 @@
 $settingsPath  = "$env:USERPROFILE\.claude\settings.json"
 $presetsPath   = "$env:USERPROFILE\.claude\launcher\presets.json"
 $backupPath    = "$env:USERPROFILE\.claude\launcher\settings.backup.json"
-$bookmarksPath = "$env:USERPROFILE\.claude\launcher\bookmarks.json"
 
 # ── Key reading ──────────────────────────────────────────────────────
 function Read-Key {
@@ -108,7 +107,6 @@ $script:presets = $null
 $script:offX = 0
 $script:offY = 0
 $script:lastLineCount = 0
-$script:lastInputEscaped = $false
 
 function Reset-State {
     foreach ($p in $allPlugins) { $script:pluginEnabled[$p] = $true }
@@ -405,7 +403,6 @@ function Show-FirstScreen {
     $options = @(
         @{ label = "Resume a session"; key = "R"; action = "resume" },
         @{ label = "New session";      key = "N"; action = "new" },
-        @{ label = "Saved chats";      key = "S"; action = "saved" },
         @{ label = "Quit";             key = "Q"; action = "quit" }
     )
     $sel = 0
@@ -448,7 +445,6 @@ function Show-FirstScreen {
                 switch ($ch) {
                     'R' { return "resume" }
                     'N' { return "new" }
-                    'S' { return "saved" }
                     'Q' { return "quit" }
                 }
             }
@@ -465,11 +461,10 @@ function Read-StringWithEscape($prompt, $x, $y) {
     [Console]::ForegroundColor = [ConsoleColor]::White
     $buf = ""
     $startX = $x + $prompt.Length
-    $script:lastInputEscaped = $false
     while ($true) {
         $k = Read-Key
         $vk = $k.VirtualKeyCode
-        if ($vk -eq 27) { [Console]::CursorVisible = $false; $script:lastInputEscaped = $true; return $null }
+        if ($vk -eq 27) { [Console]::CursorVisible = $false; return $null }
         if ($vk -eq 13) { [Console]::CursorVisible = $false; if ($buf.Trim() -eq "") { return $null }; return $buf.Trim() }
         if ($vk -eq 8) {
             if ($buf.Length -gt 0) {
@@ -543,17 +538,8 @@ function Delete-Profile {
 }
 
 # ── Settings modification & launch ───────────────────────────────────
-function Launch-Claude($name) {
+function Launch-Claude {
     $cliArgs = @("--dangerously-skip-permissions")
-
-    # If named, pin a session ID and save it as a bookmark for later
-    if ($name) {
-        $sessionId = [guid]::NewGuid().ToString()
-        $cliArgs += "--session-id"; $cliArgs += $sessionId
-        $cliArgs += "-n"; $cliArgs += $name
-        Add-Bookmark $name ((Get-Location).Path) $sessionId
-    }
-
     if ($script:selectedModel -ne "Default") { $cliArgs += "--model"; $cliArgs += $script:selectedModel.ToLower() }
     $cliArgs += "--effort"; $cliArgs += $script:selectedEffort
     foreach ($f in $flagOptions) { if ($script:flagEnabled[$f]) { $cliArgs += $f } }
@@ -563,153 +549,6 @@ function Launch-Claude($name) {
     [Console]::ResetColor()
 
     & claude @cliArgs
-}
-
-# ── Bookmarks (saved chats) ──────────────────────────────────────────
-function Get-Bookmarks {
-    if (-not (Test-Path $bookmarksPath)) { return @() }
-    try { $j = Get-Content $bookmarksPath -Raw | ConvertFrom-Json } catch { return @() }
-    if ($null -eq $j) { return @() }
-    return @($j)
-}
-
-function Save-Bookmarks($list) {
-    $arr = @($list)
-    if ($arr.Count -eq 0) {
-        Set-Content $bookmarksPath "[]" -Encoding UTF8
-    } else {
-        ($arr | ConvertTo-Json -Depth 6) | Set-Content $bookmarksPath -Encoding UTF8
-    }
-}
-
-function Add-Bookmark($name, $path, $sessionId) {
-    $bm = @(Get-Bookmarks)
-    $bm += [PSCustomObject]@{ name = $name; path = $path; sessionId = $sessionId }
-    Save-Bookmarks $bm
-}
-
-function Remove-BookmarkAt($index) {
-    $bm = @(Get-Bookmarks)
-    if ($index -lt 0 -or $index -ge $bm.Count) { return }
-    $new = @(); for ($i = 0; $i -lt $bm.Count; $i++) { if ($i -ne $index) { $new += $bm[$i] } }
-    Save-Bookmarks $new
-}
-
-function Fit($s, $w) {
-    if ($null -eq $s) { return "" }
-    if ($s.Length -le $w) { return $s }
-    if ($w -le 1) { return $s.Substring(0, [Math]::Max(0, $w)) }
-    return $s.Substring(0, $w - 1) + "~"
-}
-
-# Draw a list of rows centered, same style as the other screens
-function Draw-Rows($rows, $boxW) {
-    $sz = Get-TermSize; $tw = $sz[0]; $th = $sz[1]
-    $iW = $boxW - 2
-    $totalH = $rows.Count
-    $offX = [Math]::Max(0, [int](($tw - $boxW) / 2))
-    $offY = [Math]::Max(0, [int](($th - $totalH) / 2))
-    [Console]::Clear()
-    for ($i = 0; $i -lt $rows.Count; $i++) {
-        $row = $rows[$i]; $y = $offY + $i
-        switch ($row.type) {
-            "border-top" { Write-BorderLine $offX $y $iW ([char]0x2554) ([char]0x2550) ([char]0x2557) }
-            "border-mid" { Write-BorderLine $offX $y $iW ([char]0x2560) ([char]0x2550) ([char]0x2563) }
-            "border-bot" { Write-BorderLine $offX $y $iW ([char]0x255A) ([char]0x2550) ([char]0x255D) }
-            "content"    { Write-BoxLine $offX $y $iW $row.text $row.color }
-        }
-    }
-    [Console]::ForegroundColor = [ConsoleColor]::Gray
-}
-
-# Returns a bookmark object to open, or $null to go back
-function Show-SavedChats {
-    [Console]::CursorVisible = $false
-    $sel = 0
-    $pendingDelete = $false
-    while ($true) {
-        $bm = @(Get-Bookmarks)
-        if ($bm.Count -eq 0) { $sel = 0 } elseif ($sel -ge $bm.Count) { $sel = $bm.Count - 1 }
-
-        $sz = Get-TermSize; $tw = $sz[0]
-        $boxW = [Math]::Min(74, $tw - 4); $iW = $boxW - 2
-
-        $rows = [System.Collections.Generic.List[object]]::new()
-        $rows.Add(@{ type = "border-top" })
-        $title = "Saved Chats"
-        $tpad = [int](($iW - $title.Length) / 2)
-        $rows.Add(@{ type = "content"; text = (' ' * $tpad) + $title; color = [ConsoleColor]::White })
-        $rows.Add(@{ type = "border-mid" })
-        $rows.Add(@{ type = "content"; text = ""; color = [ConsoleColor]::Gray })
-
-        if ($bm.Count -eq 0) {
-            $rows.Add(@{ type = "content"; text = "  No saved chats yet."; color = [ConsoleColor]::DarkGray })
-            $rows.Add(@{ type = "content"; text = "  Start a New session and name it to save one."; color = [ConsoleColor]::DarkGray })
-        } else {
-            for ($i = 0; $i -lt $bm.Count; $i++) {
-                $b = $bm[$i]
-                $isCur = ($i -eq $sel)
-                $marker = if ($isCur) { " > " } else { "   " }
-                $nameC = if ($isCur) { [ConsoleColor]::Cyan } else { [ConsoleColor]::Gray }
-                $rows.Add(@{ type = "content"; text = (Fit "$marker$($b.name)" $iW); color = $nameC })
-                $rows.Add(@{ type = "content"; text = (Fit "       $($b.path)" $iW); color = [ConsoleColor]::DarkGray })
-            }
-        }
-
-        $rows.Add(@{ type = "content"; text = ""; color = [ConsoleColor]::Gray })
-        $rows.Add(@{ type = "border-mid" })
-        if ($pendingDelete -and $bm.Count -gt 0) {
-            $rows.Add(@{ type = "content"; text = (Fit "  Remove '$($bm[$sel].name)' from list? [Y/N]" $iW); color = [ConsoleColor]::Red })
-        } elseif ($bm.Count -gt 0) {
-            $rows.Add(@{ type = "content"; text = "  Up/Dn = Move   Enter = Open   D = Remove   Esc = Back"; color = [ConsoleColor]::DarkGray })
-        } else {
-            $rows.Add(@{ type = "content"; text = "  Esc = Back"; color = [ConsoleColor]::DarkGray })
-        }
-        $rows.Add(@{ type = "border-bot" })
-
-        Draw-Rows $rows $boxW
-
-        $k = Read-Key; $vk = $k.VirtualKeyCode; $ch = [char]::ToUpper($k.Character)
-
-        if ($pendingDelete) {
-            if ($ch -eq 'Y') { Remove-BookmarkAt $sel; $pendingDelete = $false }
-            elseif ($ch -eq 'N' -or $vk -eq 27) { $pendingDelete = $false }
-            continue
-        }
-
-        if ($vk -eq 27) { return $null }
-        if ($bm.Count -gt 0) {
-            if ($vk -eq 38) { $sel = ($sel - 1 + $bm.Count) % $bm.Count }
-            elseif ($vk -eq 40) { $sel = ($sel + 1) % $bm.Count }
-            elseif ($vk -eq 13) { return $bm[$sel] }
-            elseif ($ch -eq 'D') { $pendingDelete = $true }
-        }
-    }
-}
-
-# Ask for a name to save this new chat. Returns name, or $null to skip saving.
-function Prompt-NewChatName {
-    $sz = Get-TermSize; $tw = $sz[0]; $th = $sz[1]
-    $boxW = [Math]::Min(60, $tw - 4); $iW = $boxW - 2
-
-    $rows = [System.Collections.Generic.List[object]]::new()
-    $rows.Add(@{ type = "border-top" })
-    $title = "Save this chat?"
-    $tpad = [int](($iW - $title.Length) / 2)
-    $rows.Add(@{ type = "content"; text = (' ' * $tpad) + $title; color = [ConsoleColor]::White })
-    $rows.Add(@{ type = "border-mid" })
-    $rows.Add(@{ type = "content"; text = ""; color = [ConsoleColor]::Gray })
-    $rows.Add(@{ type = "content"; text = "  Name it to find it under Saved chats later."; color = [ConsoleColor]::Gray })
-    $rows.Add(@{ type = "content"; text = "  Leave blank (Enter) to launch without saving."; color = [ConsoleColor]::DarkGray })
-    $rows.Add(@{ type = "content"; text = ""; color = [ConsoleColor]::Gray })
-    $rows.Add(@{ type = "content"; text = ""; color = [ConsoleColor]::Gray })   # input line lives here
-    $rows.Add(@{ type = "border-bot" })
-
-    Draw-Rows $rows $boxW
-    $offX = [Math]::Max(0, [int](($tw - $boxW) / 2))
-    $offY = [Math]::Max(0, [int](($th - $rows.Count) / 2))
-    $inputY = $offY + 7
-    return (Read-StringWithEscape "  Name: " ($offX + 1) $inputY)
 }
 
 # ── Config screen (New session) ──────────────────────────────────────
@@ -766,12 +605,8 @@ function Show-ConfigScreen {
                 13 {  # Enter = show confirmation
                     $confirmed = Show-Confirmation
                     if ($confirmed) {
-                        $name = Prompt-NewChatName
-                        if (-not $script:lastInputEscaped) {
-                            Launch-Claude $name
-                            return "launched"
-                        }
-                        # Esc at the name prompt -> back to the config screen
+                        Launch-Claude
+                        return "launched"
                     }
                 }
                 27 {  # Escape = back to first screen
@@ -808,17 +643,6 @@ function Main {
             [Console]::Clear(); [Console]::CursorVisible = $true; [Console]::ResetColor()
             & claude --resume --dangerously-skip-permissions
             return
-        }
-        if ($choice -eq "saved") {
-            $entry = Show-SavedChats
-            if ($entry) {
-                [Console]::Clear(); [Console]::CursorVisible = $true; [Console]::ResetColor()
-                if (Test-Path -LiteralPath $entry.path) { Set-Location -LiteralPath $entry.path }
-                else { Write-Host "Folder not found: $($entry.path)" -ForegroundColor Yellow }
-                & claude --resume $entry.sessionId --dangerously-skip-permissions
-                return
-            }
-            continue   # Esc in Saved chats -> back to first screen
         }
         if ($choice -eq "new") {
             $result = Show-ConfigScreen

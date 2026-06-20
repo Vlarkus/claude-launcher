@@ -1,6 +1,4 @@
 # Runtime / state — not code
-bookmarks.json
-butler-pid.txt
 session-*.json
 settings.backup.json
 
