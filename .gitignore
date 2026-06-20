@@ -1,0 +1,8 @@
+# Runtime / state — not code
+bookmarks.json
+butler-pid.txt
+session-*.json
+settings.backup.json
+
+# Timestamped backups
+launcher.backup-*.ps1
