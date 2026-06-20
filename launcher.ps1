@@ -4,6 +4,7 @@
 $settingsPath  = "$env:USERPROFILE\.claude\settings.json"
 $presetsPath   = "$env:USERPROFILE\.claude\launcher\presets.json"
 $backupPath    = "$env:USERPROFILE\.claude\launcher\settings.backup.json"
+$launchFile    = "$env:TEMP\cl-launch.json"   # hand-off: the cl wrapper runs claude at the interactive prompt
 
 # ── Key reading ──────────────────────────────────────────────────────
 function Read-Key {
@@ -538,6 +539,18 @@ function Delete-Profile {
 }
 
 # ── Settings modification & launch ───────────────────────────────────
+# Hand the chosen claude command back to the cl wrapper so it runs at the
+# interactive prompt (claude needs a real TTY; running it inside this
+# -File child makes it fall into non-interactive --print mode).
+function Write-LaunchRequest($cliArgs) {
+    $dir = (Get-Location).Path
+    $info = [PSCustomObject]@{ dir = $dir; args = @($cliArgs) }
+    $info | ConvertTo-Json -Depth 5 | Set-Content $launchFile -Encoding UTF8
+    # Also write a batch file for the cmd.exe wrapper (args never contain spaces)
+    $cmdLines = @("@echo off", "cd /d `"$dir`"", "claude $($cliArgs -join ' ')")
+    Set-Content "$env:TEMP\cl-launch.cmd" ($cmdLines -join "`r`n") -Encoding ascii
+}
+
 function Launch-Claude {
     $cliArgs = @("--dangerously-skip-permissions")
     if ($script:selectedModel -ne "Default") { $cliArgs += "--model"; $cliArgs += $script:selectedModel.ToLower() }
@@ -548,7 +561,7 @@ function Launch-Claude {
     [Console]::CursorVisible = $true
     [Console]::ResetColor()
 
-    & claude @cliArgs
+    Write-LaunchRequest $cliArgs
 }
 
 # ── Config screen (New session) ──────────────────────────────────────
@@ -641,7 +654,7 @@ function Main {
         }
         if ($choice -eq "resume") {
             [Console]::Clear(); [Console]::CursorVisible = $true; [Console]::ResetColor()
-            & claude --resume --dangerously-skip-permissions
+            Write-LaunchRequest @("--resume","--dangerously-skip-permissions")
             return
         }
         if ($choice -eq "new") {
