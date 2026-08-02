@@ -65,6 +65,23 @@ export class DefaultsEditor extends Editor {
     return row?.kind === 'field' ? row.def : null
   }
 
+  async onMouse(m, app) {
+    const vp = this.viewport
+    if (!vp) return false
+    if (m.wheel) { this.move(m.wheel === 'up' ? -1 : 1); return true }
+    if (!m.press || m.button !== 0) return false
+    if (m.y < vp.y || m.y >= vp.y + vp.h) return false
+    const i = this.offset + (m.y - vp.y)
+    const rows = this.rows()
+    if (rows[i]?.kind !== 'field') return false
+    const again = this.row === i
+    this.row = i
+    // Clicking a selected boolean or enum cycles it; anything else opens the
+    // editor, matching what enter does.
+    if (again) await this.onKey({ name: 'space', ch: ' ', ctrl: false, alt: false, shift: false }, app)
+    return true
+  }
+
   render(app, body) {
     const scr = app.screen
     const rows = this.rows()
@@ -75,6 +92,7 @@ export class DefaultsEditor extends Editor {
     if (this.row < this.offset) this.offset = this.row
     if (this.row >= this.offset + listH) this.offset = this.row - listH + 1
     this.offset = Math.max(0, Math.min(this.offset, Math.max(0, rows.length - listH)))
+    this.viewport = { y: body.y, h: listH }
 
     for (let vi = 0; vi < listH; vi++) {
       const i = this.offset + vi

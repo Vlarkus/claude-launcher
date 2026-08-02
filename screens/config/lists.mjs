@@ -5,7 +5,7 @@
 // gets a preview pane.
 
 import { S } from '../../tui/theme.mjs'
-import { List, confirm, promptText, chooseFrom, checkbox } from '../../tui/widgets.mjs'
+import { List, confirm, promptText, chooseFrom, checkbox, listMouse } from '../../tui/widgets.mjs'
 import { truncate, fit, wrap } from '../../tui/width.mjs'
 import * as Settings from '../../data/settings.mjs'
 import { tildify } from '../../data/paths.mjs'
@@ -14,6 +14,7 @@ import { Editor } from './base.mjs'
 // ── Plugins ──────────────────────────────────────────────────────────
 
 export class PluginsEditor extends Editor {
+  activateKey = 'space'   // clicking a selected plugin toggles it
   keys = [['space', 'toggle'], ['esc', 'back']]
   help = [
     'space        enable or disable the plugin',
@@ -47,6 +48,12 @@ export class PluginsEditor extends Editor {
     scr.put(body.x + 2, y, `${n} of ${this.list.items.length} enabled — changes apply to the next session`, S.warn)
   }
 
+  async onMouse(m, app) {
+    const r = listMouse(this.list, m)
+    if (r === 'activate') await this.onKey({ name: this.activateKey ?? 'enter', ch: '', ctrl: false, alt: false, shift: false }, app)
+    return !!r
+  }
+
   async onKey(ev, app) {
     switch (ev.name) {
       case 'up': this.list.move(-1); return true
@@ -69,6 +76,7 @@ export class PluginsEditor extends Editor {
 // ── Environment ──────────────────────────────────────────────────────
 
 export class EnvEditor extends Editor {
+  activateKey = 'e'
   keys = [['a', 'add'], ['e', 'edit'], ['x', 'delete'], ['esc', 'back']]
   help = [
     'a            add a variable',
@@ -99,6 +107,12 @@ export class EnvEditor extends Editor {
         { text: truncate(r.value, width - 30), style: S.base },
       ]
     })
+  }
+
+  async onMouse(m, app) {
+    const r = listMouse(this.list, m)
+    if (r === 'activate') await this.onKey({ name: this.activateKey ?? 'enter', ch: '', ctrl: false, alt: false, shift: false }, app)
+    return !!r
   }
 
   async onKey(ev, app) {
@@ -144,6 +158,7 @@ export class EnvEditor extends Editor {
 // ── MCP servers ──────────────────────────────────────────────────────
 
 export class McpEditor extends Editor {
+  activateKey = 'e'
   keys = [['a', 'add'], ['e', 'edit'], ['x', 'delete'], ['esc', 'back']]
   help = [
     'a            add a server',
@@ -211,6 +226,12 @@ export class McpEditor extends Editor {
         scr.put(x, cy, truncate(`  ${k}=${v}`, w), S.muted); cy++
       }
     }
+  }
+
+  async onMouse(m, app) {
+    const r = listMouse(this.list, m)
+    if (r === 'activate') await this.onKey({ name: this.activateKey ?? 'enter', ch: '', ctrl: false, alt: false, shift: false }, app)
+    return !!r
   }
 
   async onKey(ev, app) {

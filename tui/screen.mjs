@@ -27,6 +27,9 @@ export class Screen {
     this.cur = []
     this.prev = []
     this.entered = false
+    // Off in a pipe: the escape codes would be written into whatever is
+    // capturing the output.
+    this.mouse = out.isTTY !== false
     this._resizeHandler = () => {
       this.#measure()
       this.prev = [] // force a full repaint
@@ -40,10 +43,14 @@ export class Screen {
     this.rows = Math.max(8, this.out.rows || 24)
   }
 
+  // 1000 reports button presses and the wheel; 1006 asks for the SGR encoding,
+  // which is the only one that survives past column 223. Both are turned off on
+  // the way out so the terminal is not left emitting escape codes.
   enter() {
     if (this.entered) return
     this.entered = true
     this.out.write(CSI + '?1049h' + CSI + '?25l' + CSI + '2J' + CSI + 'H')
+    if (this.mouse) this.out.write(CSI + '?1000h' + CSI + '?1006h')
     this.out.on('resize', this._resizeHandler)
   }
 
@@ -51,6 +58,7 @@ export class Screen {
     if (!this.entered) return
     this.entered = false
     this.out.removeListener('resize', this._resizeHandler)
+    if (this.mouse) this.out.write(CSI + '?1006l' + CSI + '?1000l')
     this.out.write(CSI + '0m' + CSI + '?25h' + CSI + '?1049l')
   }
 

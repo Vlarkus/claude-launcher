@@ -104,17 +104,30 @@ export function statusStyle(status) {
   }
 }
 
-const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+// A rotating arc rather than braille. Braille dots jump between visually
+// unrelated shapes, which looks like flicker unless the frame rate is high;
+// these read as one shape turning, so the motion stays legible.
+const SPINNER = ['◜', '◠', '◝', '◞', '◡', '◟']
+export const SPINNER_MS = 90
 
-// Glyph for a status. Busy animates, so the UI reads as alive while a session
-// is working — the frame is derived from the clock rather than kept as state.
+// Glyph for a status. The frame comes from the clock so no animation state has
+// to be threaded through the screens — but the caller must redraw at roughly
+// SPINNER_MS for it to look like rotation rather than noise.
 export function statusGlyph(status, now = Date.now()) {
   switch (status) {
-    case 'busy': return SPINNER[Math.floor(now / 100) % SPINNER.length]
+    case 'busy': return SPINNER[Math.floor(now / SPINNER_MS) % SPINNER.length]
     case 'waiting': return '!'
     case 'idle': return '○'
     default: return '·'
   }
+}
+
+// Colour for a filled gauge: calm until it matters, loud when it does.
+export function gaugeStyle(frac) {
+  if (!Number.isFinite(frac)) return S.dim
+  if (frac >= 0.85) return S.err
+  if (frac >= 0.6) return S.warn
+  return S.ok
 }
 
 export function statusLabel(status) {

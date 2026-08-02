@@ -110,10 +110,43 @@ export class LaunchScreen {
     return this.profileName ? `profile: ${this.profileName}` : 'profile: —'
   }
 
+  // Rows here are hand-drawn rather than a List, so the viewport is recorded
+  // during render for the mouse to hit-test against.
+  async onMouse(m, app) {
+    const vp = this.viewport
+    if (!vp) return false
+    if (m.wheel) {
+      this.moveRow(m.wheel === 'up' ? -1 : 1)
+      return true
+    }
+    if (!m.press || m.button !== 0) return false
+    if (m.y < vp.y || m.y >= vp.y + vp.h) return false
+    const i = this.offset + (m.y - vp.y)
+    const rows = this.rows()
+    const row = rows[i]
+    if (!row || row.type === 'sep') return false
+
+    const again = this.row === i
+    this.row = i
+    // Clicking directly on a checkbox toggles that flag; clicking elsewhere on
+    // a flag row just focuses it.
+    if (row.type === 'flags' && vp.cells?.[i]) {
+      const cell = vp.cells[i].findIndex((c) => m.x >= c.x && m.x < c.x + c.w)
+      if (cell >= 0) {
+        this.cell = cell
+        this.toggleFlag(app, row.flags[cell])
+        return true
+      }
+    }
+    if (again) await this.onKey({ name: 'enter', ch: '', ctrl: false, alt: false, shift: false }, app)
+    return true
+  }
+
   render(app, body) {
     const scr = app.screen
     const rows = this.rows()
     const labelW = 9
+    const cells = {}
 
     // Bottom block: description + command preview.
     const cmd = displayCommand(this.cfg)
@@ -152,13 +185,16 @@ export class LaunchScreen {
         }
       } else if (row.type === 'flags') {
         let cx = vx
+        cells[i] = []
         row.flags.forEach((f, fi) => {
           const on = this.cfg.flags[f.key]
           const focused = selected && fi === this.cell
           const text = `${checkbox(on)}${f.label}`
           if (cx + stringWidth(text) + 2 > vx + vw) return
           const style = focused ? S.selOn : on ? S.title : (selected ? S.muted : S.dim)
+          const from = cx
           cx = scr.put(cx, y, text, style)
+          cells[i].push({ x: from, w: cx - from })
           cx = scr.put(cx, y, '  ', S.base)
         })
       } else if (row.type === 'action') {
@@ -172,6 +208,8 @@ export class LaunchScreen {
         scr.put(vx, y, truncate(String(shown), vw), row.value ? (selected ? S.title : S.base) : S.dim)
       }
     }
+
+    this.viewport = { y: listY, h: listH, cells }
 
     // Description of whatever is focused.
     let by = body.y + listH

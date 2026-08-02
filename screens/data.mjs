@@ -4,8 +4,8 @@
 // directory that may no longer exist. Projects whose directory is gone are the
 // main thing worth deleting, so they are called out.
 
-import { S } from '../tui/theme.mjs'
-import { List, confirm, chooseFrom, showText } from '../tui/widgets.mjs'
+import { S, gaugeStyle } from '../tui/theme.mjs'
+import { List, confirm, chooseFrom, showText, listMouse, meter } from '../tui/widgets.mjs'
 import { truncate, fit, wrap } from '../tui/width.mjs'
 import * as Projects from '../data/projects.mjs'
 import * as Sessions from '../data/sessions.mjs'
@@ -46,6 +46,7 @@ export class DataScreen {
     this.projects = Projects.listProjects()
     this.caches = Projects.listCaches()
     this.usage = Projects.totalUsage()
+    this.maxSize = this.projects.reduce((m, p) => Math.max(m, p.size), 0)
     this.rebuild()
   }
 
@@ -88,11 +89,15 @@ export class DataScreen {
       // Without a session to read the real cwd from, show the folder name
       // rather than a decoded path that may be wrong.
       const name = p.cwdGuessed ? p.id : (shortProject(p.cwd) || p.id)
+      // A meter against the largest project makes the distribution obvious at
+      // a glance — which one is worth deleting is the whole question here.
+      const frac = this.maxSize ? p.size / this.maxSize : 0
       return [
         { text: '  ' + (p.cwdExists ? ' ' : '!') + ' ', style: p.cwdExists ? S.base : S.err },
-        { text: fit(name, width - 18), style: selected ? S.title : (p.cwdExists ? S.base : S.dim) },
+        { text: fit(name, width - 26), style: selected ? S.title : (p.cwdExists ? S.base : S.dim) },
+        { text: meter(frac, 6) + ' ', style: gaugeStyle(frac) },
         { text: fit(formatBytes(p.size), 7, 'right'), style: S.muted },
-        { text: fit(String(p.sessions), 5, 'right'), style: S.dim },
+        { text: fit(String(p.sessions), 4, 'right'), style: S.dim },
       ]
     })
 
@@ -153,6 +158,12 @@ export class DataScreen {
         scr.put(x, cy, `  +${p.transcripts.length - room} more`, S.dim)
       }
     }
+  }
+
+  async onMouse(m, app) {
+    const r = listMouse(this.list, m)
+    if (r === 'activate') await this.onKey({ name: 'enter', ch: '', ctrl: false, alt: false, shift: false }, app)
+    return !!r
   }
 
   async onKey(ev, app) {

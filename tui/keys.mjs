@@ -44,6 +44,34 @@ function decode(buf) {
     // Lone Escape
     if (s.length === 1) return [{ name: 'escape', ch: '', ctrl: false, alt: false, shift: false, raw: s }, 1]
 
+    // SGR mouse: ESC [ < button ; col ; row  (M press / m release)
+    if (s[1] === '[' && s[2] === '<') {
+      const m = /^\x1b\[<(\d+);(\d+);(\d+)([Mm])/.exec(s)
+      if (!m) return [null, 0] // still arriving
+      const [full, bRaw, colRaw, rowRaw, kind] = m
+      const b = Number(bRaw)
+      const wheel = (b & 64) ? ((b & 1) ? 'down' : 'up') : null
+      return [{
+        name: 'mouse',
+        ch: '',
+        ctrl: !!(b & 16),
+        alt: !!(b & 8),
+        shift: !!(b & 4),
+        raw: full,
+        mouse: {
+          // Terminals report 1-based coordinates; everything else here is
+          // 0-based, so convert once at the boundary.
+          x: Number(colRaw) - 1,
+          y: Number(rowRaw) - 1,
+          button: wheel ? -1 : (b & 3),
+          press: kind === 'M' && !wheel,
+          release: kind === 'm',
+          motion: !!(b & 32),
+          wheel,
+        },
+      }, full.length]
+    }
+
     // CSI
     if (s[1] === '[') {
       const m = /^\x1b\[([0-9;]*)([A-Za-z~])/.exec(s)

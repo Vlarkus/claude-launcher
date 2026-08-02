@@ -9,6 +9,7 @@ import { Screen } from './tui/screen.mjs'
 import { Keyboard } from './tui/keys.mjs'
 import { S } from './tui/theme.mjs'
 import { drawHeader, drawFooter, showText } from './tui/widgets.mjs'
+import { SPINNER_MS } from './tui/theme.mjs'
 import { Vim, VIM_HELP } from './tui/vim.mjs'
 import fs from 'node:fs'
 import { runClaude, displayCommand } from './launch.mjs'
@@ -62,28 +63,59 @@ export class App {
     return (this.live ?? []).filter((l) => l.status === 'waiting')
   }
 
+  // True when the visible screen has something moving on it. Only then is it
+  // worth redrawing at animation rate.
+  get animating() {
+    return this.current.animates === true && (this.live ?? []).some((l) => l.status === 'busy')
+  }
+
   startLiveRefresh() {
-    const tick = () => {
+    // Two cadences on one timer. Reading sessions/*.json every frame would be
+    // wasteful, but drawing only once a second makes a spinner advance ten
+    // frames between paints, which reads as flicker rather than rotation. So:
+    // poll on a 1s boundary, draw at SPINNER_MS while something is animating.
+    const POLL_MS = 1000
+    let sincePoll = 0
+
+    const step = () => {
       if (!this.running || this.overlays > 0) return
-      const liveChanged = this.refreshLive()
+      sincePoll += this._interval
+
+      let liveChanged = false
+      if (sincePoll >= POLL_MS) {
+        sincePoll = 0
+        liveChanged = this.refreshLive()
+      }
+
       const screenWants = this.current.onTick?.(this) === true
-      // Repaint while anything is working so the spinner animates and elapsed
-      // times stay honest.
-      const animating = (this.live ?? []).some((l) => l.status === 'busy')
+      const animating = this.animating
       if (liveChanged || screenWants || animating) this.render()
+
+      const want = animating ? SPINNER_MS : POLL_MS
+      if (want !== this._interval) this.#retime(want)
     }
-    this._tick = tick
-    this._ticker = setInterval(tick, 1000)
-    this._ticker.unref?.()
+
+    this._tick = step
+    this.#retime(this.animating ? SPINNER_MS : POLL_MS)
 
     try {
       this._watcher = fs.watch(P.sessions, { persistent: false }, () => {
         clearTimeout(this._watchDebounce)
-        this._watchDebounce = setTimeout(tick, 120)
+        this._watchDebounce = setTimeout(() => {
+          if (!this.running || this.overlays > 0) return
+          if (this.refreshLive()) this.render()
+        }, 120)
         this._watchDebounce?.unref?.()
       })
       this._watcher.on?.('error', () => {})
     } catch { /* watching is an optimisation; the poll still covers it */ }
+  }
+
+  #retime(ms) {
+    if (this._ticker) clearInterval(this._ticker)
+    this._interval = ms
+    this._ticker = setInterval(this._tick, ms)
+    this._ticker.unref?.()
   }
 
   stopLiveRefresh() {
@@ -133,7 +165,7 @@ export class App {
     // A session waiting on input is worth surfacing from every screen, not
     // only the one listing sessions.
     const waiting = this.needsYou
-    drawHeader(scr, {
+    this._tabRects = drawHeader(scr, {
       tabs: this.screens.map((s) => s.title),
       active: this.index,
       right: this.current.headerRight?.(this) ?? '',
@@ -160,8 +192,23 @@ export class App {
     this.switchTo((this.index + delta + this.screens.length) % this.screens.length)
   }
 
+  // Clicks on the tab strip switch screens; everything below the rule belongs
+  // to the current screen.
+  async handleMouse(m) {
+    if (m.release) return
+    if (m.y <= 1) {
+      if (m.press && m.button === 0) {
+        const hit = (this._tabRects ?? []).find((r) => m.x >= r.x && m.x < r.x + r.w)
+        if (hit) this.switchTo(hit.index)
+      }
+      return
+    }
+    await this.current.onMouse?.(m, this)
+  }
+
   async handleKey(raw) {
     if (raw.ctrl && raw.name === 'c') { this.quit(); return }
+    if (raw.name === 'mouse') { await this.handleMouse(raw.mouse); return }
 
     // A screen capturing text sees the key untranslated, so typing "j" into
     // the filter types a j rather than moving the cursor.
@@ -200,10 +247,15 @@ export class App {
       ...VIM_HELP.map((l) => '  ' + l),
       '',
       { text: 'Global', style: S.heading },
-      '  1-4 / tab      switch screen',
+      '  1-5 / tab      switch screen',
       '  ?              this help',
       '  q / ctrl-c     quit',
       '  esc            step back, or close an overlay',
+      '',
+      { text: 'Mouse', style: S.heading },
+      '  wheel          scroll the list',
+      '  click          select a row, or a tab in the header',
+      '  click again    open the selected row',
       '',
       { text: this.current.title, style: S.heading },
       ...(this.current.help ?? []).map((l) => '  ' + l),

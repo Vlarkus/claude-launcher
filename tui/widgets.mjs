@@ -94,8 +94,19 @@ export class List {
     this.offset = Math.max(0, Math.min(this.offset, maxOff))
   }
 
+  // Which item is at screen row `my`? -1 when the point is outside the list or
+  // past its last row. Depends on `rect`, recorded by the last draw().
+  hitTest(mx, my) {
+    const r = this.rect
+    if (!r) return -1
+    if (mx < r.x || mx >= r.x + r.w || my < r.y || my >= r.y + r.h) return -1
+    const i = this.offset + (my - r.y)
+    return i < this.items.length ? i : -1
+  }
+
   // renderRow(item, { selected, width, index }) → [{ text, style }] or string
   draw(scr, x, y, w, h, renderRow, { focused = true } = {}) {
+    this.rect = { x, y, w, h }
     this.#reflow(h)
     const needsBar = this.items.length > h
     const listW = needsBar ? w - 1 : w
@@ -143,6 +154,7 @@ export function scrollbar(scr, x, y, h, total, offset) {
 
 // ── Chrome ───────────────────────────────────────────────────────────
 
+// Returns the clickable region of each tab so the app can route mouse presses.
 export function drawHeader(scr, { tabs = [], active = 0, right = '', alert = '' } = {}) {
   const w = scr.cols
   scr.fill(0, 0, w, 1, ' ', S.base)
@@ -150,10 +162,13 @@ export function drawHeader(scr, { tabs = [], active = 0, right = '', alert = '' 
   x = scr.put(x, 0, 'cl', S.title)
   x = scr.put(x, 0, '  ', S.base)
 
+  const rects = []
   tabs.forEach((t, i) => {
     const on = i === active
+    const from = x
     x = scr.put(x, 0, ` ${i + 1} `, on ? S.accent : S.dim)
     x = scr.put(x, 0, t, on ? S.title : S.muted)
+    rects.push({ index: i, x: from, w: x - from })
     x = scr.put(x, 0, '  ', S.base)
   })
 
@@ -165,6 +180,7 @@ export function drawHeader(scr, { tabs = [], active = 0, right = '', alert = '' 
   if (alert && w - 1 - aw > x) scr.put(w - 1 - stringWidth(alert), 0, alert, S.warn)
 
   scr.hline(0, 1, w, S.border)
+  return rects
 }
 
 // keys: [['enter', 'resume'], ['n', 'new'], …]
@@ -209,6 +225,59 @@ export function drawEnum(scr, x, y, w, options, current, { selected = false, lab
 
 export function checkbox(on) {
   return on ? '[x]' : '[ ]'
+}
+
+// ── Gauges ───────────────────────────────────────────────────────────
+
+// Eighth-width blocks, so a bar moves smoothly rather than a character at a
+// time — at typical widths that is eight times the resolution.
+const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉']
+
+// Horizontal bar. `frac` is clamped to 0..1; the track is drawn behind so the
+// full width always reads as the scale.
+export function drawBar(scr, x, y, w, frac, { style = S.ok, track = S.dim } = {}) {
+  if (w <= 0) return
+  const f = Math.max(0, Math.min(1, Number(frac) || 0))
+  const total = w * 8
+  const filled = Math.round(f * total)
+  const whole = Math.floor(filled / 8)
+  const rest = filled % 8
+
+  scr.put(x, y, '─'.repeat(w), track)
+  if (whole > 0) scr.put(x, y, '█'.repeat(Math.min(whole, w)), style)
+  if (rest > 0 && whole < w) scr.put(x + whole, y, EIGHTHS[rest], style)
+}
+
+// Compact inline meter: ▓▓▓▓░░░░  used where a full-width bar would dominate.
+export function meter(frac, w = 8, { full = '▰', empty = '▱' } = {}) {
+  const f = Math.max(0, Math.min(1, Number(frac) || 0))
+  const on = Math.round(f * w)
+  return full.repeat(on) + empty.repeat(Math.max(0, w - on))
+}
+
+export function fmtTokens(n) {
+  if (!n) return '0'
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1).replace(/\.0$/, '') + 'M'
+  if (n >= 1000) return Math.round(n / 1000) + 'k'
+  return String(n)
+}
+
+// ── Mouse ────────────────────────────────────────────────────────────
+
+// Shared list behaviour: wheel scrolls, a click selects, and clicking the row
+// that is already selected activates it — the same "click twice" idiom lazygit
+// uses, without needing double-click timing.
+export function listMouse(list, m, { wheelRows = 3 } = {}) {
+  if (m.wheel) {
+    list.move(m.wheel === 'up' ? -wheelRows : wheelRows)
+    return 'moved'
+  }
+  if (!m.press || m.button !== 0) return false
+  const i = list.hitTest(m.x, m.y)
+  if (i < 0 || !list.selectable(i)) return false
+  const again = list.cursor === i
+  list.moveTo(i)
+  return again ? 'activate' : 'moved'
 }
 
 // ── Modals ───────────────────────────────────────────────────────────

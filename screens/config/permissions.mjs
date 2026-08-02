@@ -2,7 +2,7 @@
 // spelling out before you trust it.
 
 import { S } from '../../tui/theme.mjs'
-import { List, confirm, promptText, chooseFrom } from '../../tui/widgets.mjs'
+import { List, confirm, promptText, chooseFrom, listMouse } from '../../tui/widgets.mjs'
 import { truncate, fit, wrap } from '../../tui/width.mjs'
 import * as Settings from '../../data/settings.mjs'
 import { tildify, HOME } from '../../data/paths.mjs'
@@ -104,6 +104,12 @@ export class PermissionsEditor extends Editor {
       scr.put(x, cy, 'additional directories', S.heading); cy++
       for (const d of dirs) { scr.put(x, cy, truncate('  ' + tildify(d), w), S.muted); cy++ }
     }
+  }
+
+  async onMouse(m, app) {
+    const r = listMouse(this.list, m)
+    if (r === 'activate') await this.onKey({ name: 'enter', ch: '', ctrl: false, alt: false, shift: false }, app)
+    return !!r
   }
 
   async onKey(ev, app) {

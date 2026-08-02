@@ -8,7 +8,7 @@
 
 import { spawn } from 'node:child_process'
 import { S } from '../../tui/theme.mjs'
-import { List, confirm, promptText, chooseFrom, showText, checkbox } from '../../tui/widgets.mjs'
+import { List, confirm, promptText, chooseFrom, showText, checkbox, listMouse } from '../../tui/widgets.mjs'
 import { truncate, fit, wrap } from '../../tui/width.mjs'
 import * as Settings from '../../data/settings.mjs'
 import * as State from '../../data/state.mjs'
@@ -138,6 +138,12 @@ export class HooksEditor extends Editor {
         scr.put(x, cy, 'press c to make it portable', S.dim)
       }
     }
+  }
+
+  async onMouse(m, app) {
+    const r = listMouse(this.list, m)
+    if (r === 'activate') await this.onKey({ name: 'enter', ch: '', ctrl: false, alt: false, shift: false }, app)
+    return !!r
   }
 
   async onKey(ev, app) {

@@ -9,7 +9,7 @@
 // settings files.
 
 import { S } from '../tui/theme.mjs'
-import { List, confirm, chooseFrom, showText } from '../tui/widgets.mjs'
+import { List, confirm, chooseFrom, showText, listMouse } from '../tui/widgets.mjs'
 import { truncate, fit, wrap, stringWidth } from '../tui/width.mjs'
 import * as Settings from '../data/settings.mjs'
 import { listBackups, restoreBackup, diffLines } from '../data/json.mjs'
@@ -133,6 +133,13 @@ export class ConfigScreen {
 
   get textEntry() {
     return this.editor?.textEntry ?? false
+  }
+
+  async onMouse(m, app) {
+    if (this.editor) return this.editor.onMouse?.(m, app) ?? false
+    const r = listMouse(this.list, m)
+    if (r === 'activate') await this.onKey({ name: 'enter', ch: '', ctrl: false, alt: false, shift: false }, app)
+    return !!r
   }
 
   async onKey(ev, app) {

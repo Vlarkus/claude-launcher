@@ -36,6 +36,20 @@ Translation happens once, in `tui/vim.mjs`, so screens only ever handle the
 canonical names (`up`, `down`, `left`, `right`, `home`, `end`, `pageup`,
 `pagedown`). A new screen gets vim navigation without doing anything.
 
+### Mouse
+
+```
+wheel            scroll the list
+click            select a row, or a tab in the header
+click again      open the selected row
+```
+
+Clicking the row that is already selected activates it — the same idiom
+lazygit uses, and it avoids depending on double-click timing. On Launch,
+clicking directly on a checkbox toggles that flag. Mouse reporting (SGR, so it
+works past column 223) is enabled on entry and disabled on exit, and never
+turned on when output is piped.
+
 ## Screens
 
 Five, reached with `1`–`5`, `[`/`]`, or Tab. Each fills the terminal. cl opens
@@ -43,14 +57,26 @@ on Dispatch when something is running, otherwise on Sessions.
 
 **1 Dispatch** — what is running right now, and what it is doing. One row per
 live session, sorted so anything waiting on you comes first, then whatever is
-working, then idle. The detail pane shows the model, context size, output
+working, then idle. The detail pane shows the model, context as a gauge, output
 tokens, tool count, and the current activity — the tool being run or the text
 being written — read from the tail of the transcript. `w` jumps to the next
 session that needs you.
 
+```
+context  522k / 1M                          52%
+         ████████████████████▌──────────────────
+```
+
+The gauge turns amber past 60% and red past 85%. The window is inferred from
+the count, not the model name: a 1M-context session still reports itself as
+plain `claude-opus-5`, so the only honest signal is that it has already passed
+200k.
+
 Updates on its own: a one-second poll plus a watch on `sessions/`, so status
-changes appear without touching the keyboard. A `!` in the header appears on
-every screen when a session is waiting on input.
+changes appear without touching the keyboard. While something is working the
+redraw rate rises to the spinner's frame rate, so the animation reads as
+rotation rather than flicker. A `!` in the header appears on every screen when
+a session is waiting on input.
 
 **2 Sessions** — every session ever run, grouped Live / Pinned / Recent, with
 detail on the right. `enter` resumes, `p` pins, `x` deletes, `/` filters.

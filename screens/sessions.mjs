@@ -5,8 +5,8 @@
 // from shell to conversation.
 
 import path from 'node:path'
-import { S, statusStyle } from '../tui/theme.mjs'
-import { List, confirm, promptText, drawFooter } from '../tui/widgets.mjs'
+import { S, statusStyle, statusGlyph } from '../tui/theme.mjs'
+import { List, confirm, promptText, listMouse } from '../tui/widgets.mjs'
 import { truncate, fit, wrap, stringWidth } from '../tui/width.mjs'
 import * as Sessions from '../data/sessions.mjs'
 import * as State from '../data/state.mjs'
@@ -39,6 +39,9 @@ export class SessionsScreen {
   get textEntry() {
     return this.filtering
   }
+
+  // Live rows carry a spinner, so redraw at animation rate while one is busy.
+  animates = true
 
   constructor() {
     this.list = new List([])
@@ -191,7 +194,7 @@ export class SessionsScreen {
 
       let mark = '  '
       let markStyle = S.dim
-      if (item.live) { mark = ' ●'; markStyle = statusStyle(item.live.status) }
+      if (item.live) { mark = ' ' + statusGlyph(item.live.status); markStyle = statusStyle(item.live.status) }
       else if (item.pinned) { mark = ' ★'; markStyle = S.warn }
 
       return [
@@ -264,6 +267,12 @@ export class SessionsScreen {
   selectedSession() {
     const item = this.list.selected()
     return item && item.kind === 'session' ? item : null
+  }
+
+  async onMouse(m, app) {
+    const r = listMouse(this.list, m)
+    if (r === 'activate') await this.onKey({ name: 'enter', ch: '', ctrl: false, alt: false, shift: false }, app)
+    return !!r
   }
 
   async onKey(ev, app) {

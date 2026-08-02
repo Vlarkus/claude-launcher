@@ -11,8 +11,8 @@
 // nothing.
 
 import fs from 'node:fs'
-import { S, statusStyle, statusGlyph, statusLabel } from '../tui/theme.mjs'
-import { List, confirm } from '../tui/widgets.mjs'
+import { S, statusStyle, statusGlyph, statusLabel, gaugeStyle } from '../tui/theme.mjs'
+import { List, confirm, drawBar, fmtTokens, listMouse } from '../tui/widgets.mjs'
 import { truncate, fit, wrap, stringWidth } from '../tui/width.mjs'
 import * as Sessions from '../data/sessions.mjs'
 import { tildify, shortProject, formatAge, formatAgo, formatBytes, exists } from '../data/paths.mjs'
@@ -41,9 +41,18 @@ export class DispatchScreen {
     'Output is the token count of its most recent reply.',
   ]
 
+  // Tells the app to redraw at animation rate while something is working.
+  animates = true
+
   constructor() {
     this.list = new List([])
     this.lastSig = null
+  }
+
+  async onMouse(m, app) {
+    const r = listMouse(this.list, m)
+    if (r === 'activate') await this.onKey({ name: 'enter', ch: '', ctrl: false, alt: false, shift: false }, app)
+    return !!r
   }
 
   onEnter(app) {
@@ -164,12 +173,31 @@ export class DispatchScreen {
 
     if (act) {
       if (act.model) field('model', act.model.replace(/^claude-/, ''))
+
+      // Context as a gauge. The window is inferred from the count rather than
+      // the model name, because a 1M-context session still reports itself as
+      // plain "claude-opus-5" — the only honest signal is that it has already
+      // exceeded 200k.
+      if (act.contextTokens) {
+        const window = contextWindow(act.contextTokens)
+        const frac = act.contextTokens / window
+        scr.put(x, cy, fit('context', 9), S.muted)
+        const label = `${fmtTokens(act.contextTokens)} / ${fmtTokens(window)}`
+        scr.put(x + 9, cy, label, gaugeStyle(frac))
+        const pct = `${Math.round(frac * 100)}%`
+        if (x + w - stringWidth(pct) > x + 9 + stringWidth(label) + 2) {
+          scr.put(x + w - stringWidth(pct), cy, pct, gaugeStyle(frac))
+        }
+        cy++
+        drawBar(scr, x + 9, cy, Math.max(4, w - 9), frac, { style: gaugeStyle(frac) })
+        cy += 2
+      }
+
       const stats = []
-      if (act.contextTokens) stats.push(`${fmtTokens(act.contextTokens)} context`)
       if (act.outputTokens) stats.push(`${fmtTokens(act.outputTokens)} out`)
       if (act.tools) stats.push(`${act.tools} tool${act.tools === 1 ? '' : 's'}`)
-      if (stats.length) field('usage', stats.join('  ·  '))
-      try { field('size', formatBytes(fs.statSync(file).size)) } catch { /* stat raced a write */ }
+      try { stats.push(formatBytes(fs.statSync(file).size)) } catch { /* stat raced a write */ }
+      if (stats.length) field('turn', stats.join('  ·  '))
     }
 
     // Current activity — the newest thing in the transcript.
@@ -243,9 +271,10 @@ export class DispatchScreen {
   }
 }
 
-function fmtTokens(n) {
-  if (!n) return '0'
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
-  if (n >= 1000) return Math.round(n / 1000) + 'k'
-  return String(n)
+// Standard context windows, smallest first. A session is assumed to be using
+// the smallest one it still fits inside.
+const WINDOWS = [200_000, 1_000_000]
+
+function contextWindow(tokens) {
+  return WINDOWS.find((w) => tokens <= w) ?? WINDOWS[WINDOWS.length - 1]
 }

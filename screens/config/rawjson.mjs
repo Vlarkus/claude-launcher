@@ -5,7 +5,7 @@
 // text buffer so the file cannot be left syntactically broken by a stray edit.
 
 import { S } from '../../tui/theme.mjs'
-import { List, confirm, promptText, chooseFrom } from '../../tui/widgets.mjs'
+import { List, confirm, promptText, chooseFrom, listMouse } from '../../tui/widgets.mjs'
 import { truncate, fit } from '../../tui/width.mjs'
 import { readJson, updateJson } from '../../data/json.mjs'
 import { tildify } from '../../data/paths.mjs'
@@ -107,6 +107,12 @@ export class RawJsonEditor {
     const y = body.y + body.h - 1
     scr.hline(body.x, y - 1, body.w, S.border)
     scr.put(body.x + 2, y, tildify(this.file), S.muted)
+  }
+
+  async onMouse(m, app) {
+    const r = listMouse(this.list, m)
+    if (r === 'activate') await this.onKey({ name: 'enter', ch: '', ctrl: false, alt: false, shift: false }, app)
+    return !!r
   }
 
   async onKey(ev, app) {
