@@ -14,6 +14,7 @@ import { App } from './app.mjs'
 import { DispatchScreen } from './screens/dispatch.mjs'
 import { SessionsScreen } from './screens/sessions.mjs'
 import { LaunchScreen } from './screens/launch.mjs'
+import { StatsScreen } from './screens/stats.mjs'
 import { ConfigScreen } from './screens/config.mjs'
 import { DataScreen } from './screens/data.mjs'
 import { emptyConfig, runClaude } from './launch.mjs'
@@ -34,7 +35,8 @@ const HELP = `
     cl -v, --version      version
 
   in the launcher
-    1-5 / [ ] / tab       Dispatch · Sessions · Launch · Config · Data
+    1-6 / [ ] / tab       Dispatch · Sessions · Launch · Stats · Config · Data
+    \`                     toggle the usage summary bar
     enter                 resume the highlighted session
     n                     new session
     j k h l gg G          vim navigation
@@ -106,6 +108,7 @@ async function main() {
     new DispatchScreen(),
     new SessionsScreen(),
     new LaunchScreen(),
+    new StatsScreen(),
     new ConfigScreen(),
     new DataScreen(),
   ])

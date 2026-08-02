@@ -4,7 +4,7 @@
 // directory that may no longer exist. Projects whose directory is gone are the
 // main thing worth deleting, so they are called out.
 
-import { S, gaugeStyle } from '../tui/theme.mjs'
+import { S } from '../tui/theme.mjs'
 import { List, confirm, chooseFrom, showText, listMouse, meter } from '../tui/widgets.mjs'
 import { truncate, fit, wrap } from '../tui/width.mjs'
 import * as Projects from '../data/projects.mjs'
@@ -91,11 +91,16 @@ export class DataScreen {
       const name = p.cwdGuessed ? p.id : (shortProject(p.cwd) || p.id)
       // A meter against the largest project makes the distribution obvious at
       // a glance — which one is worth deleting is the whole question here.
+      //
+      // One hue for every bar. Projects have no natural order, so colouring
+      // each by its own size would encode length twice and burn the only free
+      // channel; and the ok/warn/err ramp means a *state*, which a project's
+      // size is not.
       const frac = this.maxSize ? p.size / this.maxSize : 0
       return [
         { text: '  ' + (p.cwdExists ? ' ' : '!') + ' ', style: p.cwdExists ? S.base : S.err },
         { text: fit(name, width - 26), style: selected ? S.title : (p.cwdExists ? S.base : S.dim) },
-        { text: meter(frac, 6) + ' ', style: gaugeStyle(frac) },
+        { text: meter(frac, 6) + ' ', style: S.accent },
         { text: fit(formatBytes(p.size), 7, 'right'), style: S.muted },
         { text: fit(String(p.sessions), 4, 'right'), style: S.dim },
       ]

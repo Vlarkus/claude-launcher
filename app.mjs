@@ -10,10 +10,13 @@ import { Keyboard } from './tui/keys.mjs'
 import { S } from './tui/theme.mjs'
 import { drawHeader, drawFooter, showText } from './tui/widgets.mjs'
 import { SPINNER_MS } from './tui/theme.mjs'
+import { sparkline, fmtCount } from './tui/charts.mjs'
+import { stringWidth } from './tui/width.mjs'
+import * as Usage from './data/usage.mjs'
 import { Vim, VIM_HELP } from './tui/vim.mjs'
 import fs from 'node:fs'
 import { runClaude, displayCommand } from './launch.mjs'
-import { saveState } from './data/state.mjs'
+import { saveState, loadState } from './data/state.mjs'
 import { listLive, liveSignature } from './data/sessions.mjs'
 import { P, tildify } from './data/paths.mjs'
 
@@ -33,6 +36,7 @@ export class App {
     this.vim = new Vim()
     this.live = []
     this._liveSig = null
+    this.statsBar = loadState().ui?.statsBar === true
     this.screen.onResize = () => this.render()
     for (const s of screens) s.app = this
   }
@@ -173,8 +177,10 @@ export class App {
         ? `! ${waiting.length} need${waiting.length === 1 ? 's' : ''} you`
         : '',
     })
-    const body = { x: 0, y: 2, w: scr.cols, h: scr.rows - 3 }
+    const statsH = this.statsBar ? 2 : 0
+    const body = { x: 0, y: 2, w: scr.cols, h: scr.rows - 3 - statsH }
     this.current.render(this, body)
+    if (this.statsBar) this.drawStatsBar(scr, scr.rows - 3)
 
     if (this.message && Date.now() > this.messageUntil) this.message = null
     drawFooter(scr, this.current.keys ?? [], {
@@ -233,12 +239,55 @@ export class App {
       return
     }
     if (ev.name === '?') { await this.showHelp(); return }
+    if (ev.name === '`') {
+      this.statsBar = !this.statsBar
+      const st = loadState()
+      st.ui = { ...(st.ui ?? {}), statsBar: this.statsBar }
+      saveState()
+      this.toast(this.statsBar ? 'summary bar on' : 'summary bar off')
+      return
+    }
 
     // Left/right that no screen claimed moves between screens, the way h/l
     // moves between panels in lazygit. Screens that use them for their own
     // navigation — Launch's enums, the JSON tree's fold — consume them first.
     if (ev.name === 'left') { this.step(-1); return }
     if (ev.name === 'right') { this.step(1); return }
+  }
+
+  // A one-line summary that can sit under any screen. Kept to real figures:
+  // a rolling window over recorded usage, never a quota — Claude does not
+  // write its rate limits to disk, so cl cannot know what is left.
+  drawStatsBar(scr, y) {
+    scr.hline(0, y, scr.cols, S.border)
+    const yy = y + 1
+    scr.fill(0, yy, scr.cols, 1, ' ', S.base)
+
+    let agg
+    try { agg = Usage.collect({ maxAgeMs: 10_000 }) } catch { return }
+    const win = Usage.window(agg)
+    const day = Usage.today(agg)
+
+    let x = 1
+    const cell = (label, value, style = S.base) => {
+      x = scr.put(x, yy, label + ' ', S.muted)
+      x = scr.put(x, yy, value, style)
+      x = scr.put(x, yy, '   ', S.base)
+    }
+    cell(`${Usage.WINDOW_HOURS}h`, `${fmtCount(win.out)} out · ${win.msgs} turns`, S.title)
+    cell('today', `${fmtCount(day.out)} · ${day.msgs}`)
+    cell('all', `${fmtCount(agg.out)} · ${fmtCount(agg.messages)}`)
+
+    // Sparkline last, using whatever width is left.
+    const room = scr.cols - x - 2
+    if (room > 12) {
+      const pts = Usage.series(agg, { hours: 6, points: Math.min(room, 60) })
+      scr.put(scr.cols - 1 - pts.length, yy, sparkline(pts), S.accent)
+      const lbl = '6h'
+      if (scr.cols - 1 - pts.length - stringWidth(lbl) - 1 > x) {
+        scr.put(scr.cols - 2 - pts.length - stringWidth(lbl), yy, lbl, S.dim)
+      }
+    }
   }
 
   async showHelp() {

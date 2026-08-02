@@ -21,10 +21,11 @@ screen.
 ```
 j k              down / up                 gg G     top / bottom
 h l              left / right              ctrl-d/u page down / up
-[ ] 1-5 tab      switch screen             ctrl-f/b page down / up
+[ ] 1-6 tab      switch screen             ctrl-f/b page down / up
 /                search                    d        delete (same as x)
 enter            act on the selection      esc      back
 q                quit                      ?        keys for this screen
+`                toggle the usage summary bar
 ```
 
 `h`/`l` move between screens *unless* the current screen uses left/right for
@@ -52,7 +53,7 @@ turned on when output is piped.
 
 ## Screens
 
-Five, reached with `1`–`5`, `[`/`]`, or Tab. Each fills the terminal. cl opens
+Six, reached with `1`–`6`, `[`/`]`, or Tab. Each fills the terminal. cl opens
 on Dispatch when something is running, otherwise on Sessions.
 
 **1 Dispatch** — what is running right now, and what it is doing. One row per
@@ -86,12 +87,31 @@ name, directory, prompt, and the flag groups. The resulting command is rendered
 at the bottom on every keystroke, so there is no separate confirm step. `s`
 saves the configuration as a profile.
 
-**4 Config** — the persistent settings, each with a typed editor: defaults,
+**4 Stats** — one scrollable page of everything the transcripts can tell you:
+totals, a rolling 5-hour window, today, a 12-hour sparkline, turns per day,
+which hours you work, and breakdowns by project, tool, model, skill and plugin.
+
+Every chart is single-series and drawn in one hue, with the numbers printed
+beside the bars — nothing here needs colour to be read, and no categorical
+palette is shipped. Status colours stay reserved for things that mean a state.
+
+`` ` `` toggles a one-line summary of the same figures under any screen.
+
+Two deliberate omissions:
+
+- **The 5-hour figure is a rolling window over your own history, not a
+  rate-limit reading.** Claude does not write its usage limits to disk, so cl
+  cannot tell you how much quota is left, and does not pretend to.
+- **No cost.** Transcripts record tokens, not money. A dollar figure would have
+  to come from a hardcoded price table that drifts silently, so cl reports
+  tokens and stops there.
+
+**5 Config** — the persistent settings, each with a typed editor: defaults,
 hooks, permissions, plugins, MCP, statusline, keybindings, environment, memory.
 `R` opens a raw JSON tree for anything the forms do not cover, `U` switches
 between the user and local settings files, `B` restores a backup.
 
-**5 Data** — project directories with sizes and session counts, the cache
+**6 Data** — project directories with sizes and session counts, the cache
 directories, and the projects whose working directory no longer exists.
 
 ## Why options are grouped this way
@@ -153,11 +173,11 @@ hook.mjs              portable hook shim
 doctor.mjs            installation check
 migrate.mjs           one-time import from the PowerShell launcher
 
-tui/                  screen (back-buffer diff renderer), keys, theme,
-                      widgets, width
+tui/                  screen (back-buffer diff renderer), keys, vim, theme,
+                      widgets, charts, width
 data/                 paths, json (the only writer), settings, sessions,
-                      projects, state
-screens/              dispatch, sessions, launch, config, data
+                      projects, usage, state
+screens/              dispatch, sessions, launch, stats, config, data
 screens/config/       defaults, hooks, permissions, lists, misc, rawjson
 ```
 
