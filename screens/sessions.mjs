@@ -58,9 +58,19 @@ export class SessionsScreen {
   reload(app) {
     this.loaded = true
     this.all = Sessions.listSessions({ limit: HYDRATE_LIMIT })
-    this.live = Sessions.listLive()
+    this.live = app?.live ?? Sessions.listLive()
     State.reconcilePins(this.all)
     this.rebuild()
+  }
+
+  // Live status changes without a full rescan of every transcript.
+  onTick(app) {
+    const sig = Sessions.liveSignature(app.live ?? [])
+    if (sig === this.liveSig) return false
+    this.liveSig = sig
+    this.live = app.live ?? []
+    this.rebuild()
+    return true
   }
 
   rebuild() {

@@ -21,7 +21,7 @@ screen.
 ```
 j k              down / up                 gg G     top / bottom
 h l              left / right              ctrl-d/u page down / up
-[ ] 1-4 tab      switch screen             ctrl-f/b page down / up
+[ ] 1-5 tab      switch screen             ctrl-f/b page down / up
 /                search                    d        delete (same as x)
 enter            act on the selection      esc      back
 q                quit                      ?        keys for this screen
@@ -38,23 +38,34 @@ canonical names (`up`, `down`, `left`, `right`, `home`, `end`, `pageup`,
 
 ## Screens
 
-Four, reached with `1`–`4`, `[`/`]`, or Tab. Each fills the terminal.
+Five, reached with `1`–`5`, `[`/`]`, or Tab. Each fills the terminal. cl opens
+on Dispatch when something is running, otherwise on Sessions.
 
-**1 Sessions** — the landing screen. Every session grouped Live / Pinned /
-Recent, with detail on the right. Live sessions are read from `sessions/*.json`
-and show `busy` / `idle`. `enter` resumes, `p` pins, `x` deletes, `/` filters.
+**1 Dispatch** — what is running right now, and what it is doing. One row per
+live session, sorted so anything waiting on you comes first, then whatever is
+working, then idle. The detail pane shows the model, context size, output
+tokens, tool count, and the current activity — the tool being run or the text
+being written — read from the tail of the transcript. `w` jumps to the next
+session that needs you.
 
-**2 Launch** — everything that becomes a CLI argument: model, effort, agent,
+Updates on its own: a one-second poll plus a watch on `sessions/`, so status
+changes appear without touching the keyboard. A `!` in the header appears on
+every screen when a session is waiting on input.
+
+**2 Sessions** — every session ever run, grouped Live / Pinned / Recent, with
+detail on the right. `enter` resumes, `p` pins, `x` deletes, `/` filters.
+
+**3 Launch** — everything that becomes a CLI argument: model, effort, agent,
 name, directory, prompt, and the flag groups. The resulting command is rendered
 at the bottom on every keystroke, so there is no separate confirm step. `s`
 saves the configuration as a profile.
 
-**3 Config** — the persistent settings, each with a typed editor: defaults,
+**4 Config** — the persistent settings, each with a typed editor: defaults,
 hooks, permissions, plugins, MCP, statusline, keybindings, environment, memory.
 `R` opens a raw JSON tree for anything the forms do not cover, `U` switches
 between the user and local settings files, `B` restores a backup.
 
-**4 Data** — project directories with sizes and session counts, the cache
+**5 Data** — project directories with sizes and session counts, the cache
 directories, and the projects whose working directory no longer exists.
 
 ## Why options are grouped this way
@@ -120,7 +131,7 @@ tui/                  screen (back-buffer diff renderer), keys, theme,
                       widgets, width
 data/                 paths, json (the only writer), settings, sessions,
                       projects, state
-screens/              sessions, launch, config, data
+screens/              dispatch, sessions, launch, config, data
 screens/config/       defaults, hooks, permissions, lists, misc, rawjson
 ```
 

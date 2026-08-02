@@ -11,6 +11,7 @@
 //   cl hook …        run a portable hook action (see hook.mjs)
 
 import { App } from './app.mjs'
+import { DispatchScreen } from './screens/dispatch.mjs'
 import { SessionsScreen } from './screens/sessions.mjs'
 import { LaunchScreen } from './screens/launch.mjs'
 import { ConfigScreen } from './screens/config.mjs'
@@ -33,9 +34,10 @@ const HELP = `
     cl -v, --version      version
 
   in the launcher
-    1-4 / tab             Sessions · Launch · Config · Data
+    1-5 / [ ] / tab       Dispatch · Sessions · Launch · Config · Data
     enter                 resume the highlighted session
     n                     new session
+    j k h l gg G          vim navigation
     ?                     keys for the current screen
     q                     quit
 
@@ -101,11 +103,17 @@ async function main() {
   pruneStaleLiveFiles()
 
   const app = new App([
+    new DispatchScreen(),
     new SessionsScreen(),
     new LaunchScreen(),
     new ConfigScreen(),
     new DataScreen(),
   ])
+
+  // Land on Dispatch when something is running, otherwise on Sessions —
+  // an empty monitor is a poor first screen.
+  app.refreshLive()
+  app.switchTo(app.live.length ? 'dispatch' : 'sessions')
 
   const restore = () => {
     try { app.screen.leave() } catch { /* already gone */ }

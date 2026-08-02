@@ -143,7 +143,7 @@ export function scrollbar(scr, x, y, h, total, offset) {
 
 // ── Chrome ───────────────────────────────────────────────────────────
 
-export function drawHeader(scr, { tabs = [], active = 0, right = '' } = {}) {
+export function drawHeader(scr, { tabs = [], active = 0, right = '', alert = '' } = {}) {
   const w = scr.cols
   scr.fill(0, 0, w, 1, ' ', S.base)
   let x = 1
@@ -157,10 +157,13 @@ export function drawHeader(scr, { tabs = [], active = 0, right = '' } = {}) {
     x = scr.put(x, 0, '  ', S.base)
   })
 
-  if (right) {
-    const rw = stringWidth(right)
-    if (w - 1 - rw > x) scr.put(w - 1 - rw, 0, right, S.muted)
-  }
+  // The alert sits to the right of the status text so it is the last thing on
+  // the line and hard to miss.
+  const rw = stringWidth(right)
+  const aw = alert ? stringWidth(alert) + 2 : 0
+  if (right && w - 1 - rw - aw > x) scr.put(w - 1 - rw - aw, 0, right, S.muted)
+  if (alert && w - 1 - aw > x) scr.put(w - 1 - stringWidth(alert), 0, alert, S.warn)
+
   scr.hline(0, 1, w, S.border)
 }
 

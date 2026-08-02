@@ -10,9 +10,11 @@ import { Keyboard } from './tui/keys.mjs'
 import { S } from './tui/theme.mjs'
 import { drawHeader, drawFooter, showText } from './tui/widgets.mjs'
 import { Vim, VIM_HELP } from './tui/vim.mjs'
+import fs from 'node:fs'
 import { runClaude, displayCommand } from './launch.mjs'
 import { saveState } from './data/state.mjs'
-import { tildify } from './data/paths.mjs'
+import { listLive, liveSignature } from './data/sessions.mjs'
+import { P, tildify } from './data/paths.mjs'
 
 export class App {
   constructor(screens) {
@@ -28,12 +30,66 @@ export class App {
     this._toastTimer = null
     this.exitAfterLaunch = false
     this.vim = new Vim()
+    this.live = []
+    this._liveSig = null
     this.screen.onResize = () => this.render()
     for (const s of screens) s.app = this
   }
 
   get current() {
     return this.screens[this.index]
+  }
+
+  // ── Live refresh ───────────────────────────────────────────────────
+  // Frames are otherwise only drawn in response to a keypress, so a session
+  // that finished, started waiting on you, or changed what it is doing would
+  // sit on screen as a stale snapshot until you pressed something.
+  //
+  // A one-second poll picks up status changes; a watch on sessions/ makes the
+  // common case near-instant. Neither ever paints over an open modal.
+
+  refreshLive() {
+    let list = []
+    try { list = listLive() } catch { /* directory may be mid-write */ }
+    const sig = liveSignature(list)
+    const changed = sig !== this._liveSig
+    this._liveSig = sig
+    this.live = list
+    return changed
+  }
+
+  get needsYou() {
+    return (this.live ?? []).filter((l) => l.status === 'waiting')
+  }
+
+  startLiveRefresh() {
+    const tick = () => {
+      if (!this.running || this.overlays > 0) return
+      const liveChanged = this.refreshLive()
+      const screenWants = this.current.onTick?.(this) === true
+      // Repaint while anything is working so the spinner animates and elapsed
+      // times stay honest.
+      const animating = (this.live ?? []).some((l) => l.status === 'busy')
+      if (liveChanged || screenWants || animating) this.render()
+    }
+    this._tick = tick
+    this._ticker = setInterval(tick, 1000)
+    this._ticker.unref?.()
+
+    try {
+      this._watcher = fs.watch(P.sessions, { persistent: false }, () => {
+        clearTimeout(this._watchDebounce)
+        this._watchDebounce = setTimeout(tick, 120)
+        this._watchDebounce?.unref?.()
+      })
+      this._watcher.on?.('error', () => {})
+    } catch { /* watching is an optimisation; the poll still covers it */ }
+  }
+
+  stopLiveRefresh() {
+    if (this._ticker) { clearInterval(this._ticker); this._ticker = null }
+    if (this._watchDebounce) { clearTimeout(this._watchDebounce); this._watchDebounce = null }
+    if (this._watcher) { try { this._watcher.close() } catch { /* already gone */ } ; this._watcher = null }
   }
 
   // Frames are only drawn in response to a keypress, so an expired message
@@ -74,10 +130,16 @@ export class App {
   renderBase() {
     const scr = this.screen
     scr.begin()
+    // A session waiting on input is worth surfacing from every screen, not
+    // only the one listing sessions.
+    const waiting = this.needsYou
     drawHeader(scr, {
       tabs: this.screens.map((s) => s.title),
       active: this.index,
       right: this.current.headerRight?.(this) ?? '',
+      alert: waiting.length
+        ? `! ${waiting.length} need${waiting.length === 1 ? 's' : ''} you`
+        : '',
     })
     const body = { x: 0, y: 2, w: scr.cols, h: scr.rows - 3 }
     this.current.render(this, body)
@@ -157,6 +219,7 @@ export class App {
   // Tear the TUI down, run claude, then come back — or exit, when cl was
   // invoked as a one-shot.
   async launch(cfg) {
+    this.stopLiveRefresh()
     this.screen.leave()
     this.kb.stop()
     process.stdout.write('\x1b[0m')
@@ -182,6 +245,8 @@ export class App {
     this.screen.enter()
     this.kb.start()
     this.screen.invalidate()
+    this.refreshLive()
+    this.startLiveRefresh()
     for (const s of this.screens) s.onReturn?.(this)
     return result
   }
@@ -189,7 +254,9 @@ export class App {
   async run() {
     this.screen.enter()
     this.kb.start()
+    this.refreshLive()
     this.current.onEnter?.(this)
+    this.startLiveRefresh()
     this.render()
 
     try {
@@ -200,6 +267,7 @@ export class App {
       }
     } finally {
       if (this._toastTimer) { clearTimeout(this._toastTimer); this._toastTimer = null }
+      this.stopLiveRefresh()
       this.kb.stop()
       this.screen.leave()
       saveState()

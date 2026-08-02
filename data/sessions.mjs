@@ -12,7 +12,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { P, exists, decodeProject } from './paths.mjs'
+import { P, exists, decodeProject, encodeProject } from './paths.mjs'
 
 const HEAD_BYTES = 16 * 1024
 const TAIL_BYTES = 128 * 1024
@@ -236,6 +236,112 @@ export function pruneStaleLiveFiles() {
     }
   }
   return n
+}
+
+// ── Live activity ────────────────────────────────────────────────────
+// What a running session is doing right now, read from the tail of its
+// transcript. Cached on (size, mtime) because the Dispatch screen asks for
+// this once a second and transcripts run to megabytes.
+
+const activityCache = new Map()
+
+function summariseToolInput(name, input) {
+  if (!input || typeof input !== 'object') return ''
+  const pick = (...keys) => {
+    for (const k of keys) if (typeof input[k] === 'string' && input[k]) return input[k]
+    return ''
+  }
+  switch (name) {
+    case 'Bash': return pick('command', 'description')
+    case 'Read': case 'Write': case 'Edit': case 'NotebookEdit': return pick('file_path')
+    case 'Glob': case 'Grep': return pick('pattern')
+    case 'WebFetch': return pick('url')
+    case 'WebSearch': return pick('query')
+    case 'Task': case 'Agent': return pick('description', 'prompt')
+    case 'Skill': return pick('skill')
+    default: return pick('description', 'command', 'file_path', 'pattern', 'query', 'prompt')
+  }
+}
+
+export function readActivity(file) {
+  let st
+  try { st = fs.statSync(file) } catch { return null }
+  const key = `${file}:${st.size}:${st.mtimeMs}`
+  const hit = activityCache.get(key)
+  if (hit) return hit
+
+  const out = {
+    model: null,
+    contextTokens: 0,
+    outputTokens: 0,
+    lastPrompt: null,
+    activity: null,       // what it is doing now
+    activityKind: null,   // 'tool' | 'text' | 'user'
+    tools: 0,
+    turns: 0,
+    at: st.mtimeMs,
+  }
+
+  let fd
+  try { fd = fs.openSync(file, 'r') } catch { return null }
+  try {
+    const len = Math.min(st.size, TAIL_BYTES)
+    const buf = Buffer.alloc(len)
+    fs.readSync(fd, buf, 0, len, st.size - len)
+    let text = buf.toString('utf8')
+    const nl = text.indexOf('\n')
+    if (nl !== -1 && st.size > len) text = text.slice(nl + 1)
+
+    parseLines(text, (o) => {
+      if (o.type === 'assistant') {
+        out.turns++
+        const m = o.message || {}
+        if (m.model) out.model = m.model
+        const u = m.usage
+        if (u) {
+          out.contextTokens = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0)
+          out.outputTokens = u.output_tokens || 0
+        }
+        for (const b of m.content || []) {
+          if (!b || typeof b !== 'object') continue
+          if (b.type === 'tool_use') {
+            out.tools++
+            const detail = cleanPrompt(summariseToolInput(b.name, b.input))
+            out.activity = detail ? `${b.name}  ${detail}` : b.name
+            out.activityKind = 'tool'
+          } else if (b.type === 'text' && b.text?.trim()) {
+            out.activity = cleanPrompt(b.text)
+            out.activityKind = 'text'
+          }
+        }
+      } else if (o.type === 'last-prompt' && o.lastPrompt) {
+        out.lastPrompt = cleanPrompt(o.lastPrompt)
+      } else if (o.type === 'user' && o.message && !o.isSidechain) {
+        const t = cleanPrompt(textOf(o.message))
+        if (t) { out.activity = t; out.activityKind = 'user' }
+      }
+    })
+  } finally {
+    fs.closeSync(fd)
+  }
+
+  // Keep the cache from growing without bound across a long session.
+  if (activityCache.size > 32) activityCache.clear()
+  activityCache.set(key, out)
+  return out
+}
+
+// Path to a live session's transcript, if it exists.
+export function transcriptFor(live) {
+  if (!live?.cwd || !live?.id) return null
+  const dir = path.join(P.projects, encodeProject(live.cwd))
+  const file = path.join(dir, `${live.id}.jsonl`)
+  return exists(file) ? file : null
+}
+
+// Stable signature of the live set — used to decide whether a redraw is needed.
+export function liveSignature(list) {
+  return list.map((l) => `${l.id}:${l.status}:${l.updatedAt}`).sort().join('|')
 }
 
 export function deleteSession(entry) {

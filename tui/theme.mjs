@@ -89,14 +89,34 @@ export const S = {
   selOn: hasColor ? join(bg('borderOn'), '38;2;26;27;38', '1') : '7',
 }
 
-// Named status colours for session state, hook events, etc.
+// Session status. Claude reports busy / waiting / idle in sessions/*.json;
+// `waiting` is the one that means it needs you, so it gets the attention
+// colour and everything else stays quiet.
 export function statusStyle(status) {
   switch (status) {
-    case 'busy': return S.warn
-    case 'idle': return S.ok
+    case 'waiting': return S.warn
+    case 'busy': return S.info
+    case 'idle': return S.muted
     case 'live': return S.ok
     case 'gone': return S.dim
     case 'error': return S.err
     default: return S.muted
   }
+}
+
+const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
+// Glyph for a status. Busy animates, so the UI reads as alive while a session
+// is working — the frame is derived from the clock rather than kept as state.
+export function statusGlyph(status, now = Date.now()) {
+  switch (status) {
+    case 'busy': return SPINNER[Math.floor(now / 100) % SPINNER.length]
+    case 'waiting': return '!'
+    case 'idle': return '○'
+    default: return '·'
+  }
+}
+
+export function statusLabel(status) {
+  return status === 'waiting' ? 'needs you' : (status || 'unknown')
 }
