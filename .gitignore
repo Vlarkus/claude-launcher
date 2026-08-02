@@ -1,6 +1,12 @@
-# Runtime / state — not code
-session-*.json
-settings.backup.json
+# Backups cl takes before writing a config file
+backups/
 
-# Timestamped backups
-launcher.backup-*.ps1
+# Runtime state: pins, profiles, last-used config. Rewritten on every launch,
+# so tracking it would leave the repo permanently dirty. The launch profile and
+# the eight hook presets it was seeded from are preserved in
+# archive/presets.json, and `node migrate.mjs` re-imports them.
+state.json
+
+# Scratch
+*.tmp
+node_modules/
