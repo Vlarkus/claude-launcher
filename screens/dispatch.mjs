@@ -11,7 +11,7 @@
 // nothing.
 
 import fs from 'node:fs'
-import { S, statusStyle, statusGlyph, statusLabel, gaugeStyle } from '../tui/theme.mjs'
+import { S, statusStyle, statusStyleAt, statusGlyph, statusLabel, gaugeStyle } from '../tui/theme.mjs'
 import { List, confirm, drawBar, fmtTokens, listMouse } from '../tui/widgets.mjs'
 import { truncate, fit, wrap, stringWidth } from '../tui/width.mjs'
 import * as Sessions from '../data/sessions.mjs'
@@ -39,6 +39,12 @@ export class DispatchScreen {
     '',
     'Context is the size of the last request Claude sent — prompt plus cache.',
     'Output is the token count of its most recent reply.',
+    '',
+    'Subagents: "active" means a sidechain transcript was written to in the',
+    'last 25 seconds — the only signal that catches an agent mid-flight.',
+    '"dispatched" comes from the parent transcript, which records a tool call',
+    'and its result together after the fact, so it is accurate but only once',
+    'the agent has finished. No durations are shown for that reason.',
   ]
 
   // Tells the app to redraw at animation rate while something is working.
@@ -118,18 +124,25 @@ export class DispatchScreen {
     this.list.draw(scr, body.x, body.y, leftW - 1, body.h, (item, { selected, width }) => {
       if (item.kind === 'empty') return [{ text: '  nothing running', style: S.dim }]
       const l = item.live
-      const st = statusStyle(l.status)
+      const st = statusStyleAt(l.status, now)
       const name = l.name || l.id.slice(0, 8)
       const proj = shortProject(l.cwd) || ''
       const age = formatAge(l.statusUpdatedAt || l.updatedAt)
 
+      // A session farming out work looks idle at the top level, so surface the
+      // count here rather than only in the detail pane.
+      const nAgents = Sessions.subagentActivity(l).active
+      const agentTag = nAgents ? `+${nAgents}` : ''
+
       const ageW = 5
+      const tagW = agentTag ? 3 : 0
       const projW = Math.min(16, Math.max(6, Math.floor(width * 0.3)))
-      const nameW = width - projW - ageW - 5
+      const nameW = width - projW - ageW - tagW - 5
 
       return [
-        { text: ' ' + statusGlyph(l.status, now) + ' ', style: st },
+        { text: ' ' + statusGlyph(l.status) + ' ', style: st },
         { text: fit(name, nameW), style: l.status === 'waiting' ? S.title : S.base },
+        { text: agentTag ? fit(agentTag, tagW) : '', style: statusStyleAt('busy', now) },
         { text: fit(proj, projW), style: S.muted },
         { text: fit(age, ageW, 'right'), style: S.dim },
       ]
@@ -155,21 +168,31 @@ export class DispatchScreen {
       cy++
     }
 
+    const file = Sessions.transcriptFor(l)
+    const act = file ? Sessions.readActivity(file) : null
+
+    // What you asked it to do comes first — that is what identifies the
+    // session; the status is a detail about it.
+    const prompt = act?.lastPrompt || act?.firstPrompt
+    if (prompt) {
+      for (const line of wrap(prompt, w).slice(0, 3)) {
+        scr.put(x, cy, line, S.base); cy++
+      }
+      cy++
+    }
+
     // Status, and how long it has been in this state — a session "waiting" for
     // twenty minutes is a different situation from one waiting for two.
     const since = formatAge(l.statusUpdatedAt || l.updatedAt)
     scr.put(x, cy, fit('status', 9), S.muted)
     let sx = x + 9
-    sx = scr.put(sx, cy, statusGlyph(l.status) + ' ' + statusLabel(l.status), statusStyle(l.status))
+    sx = scr.put(sx, cy, statusGlyph(l.status) + ' ' + statusLabel(l.status), statusStyleAt(l.status))
     scr.put(sx, cy, `  for ${since}`, S.dim)
     cy++
 
     field('project', l.cwd ? tildify(l.cwd) : null, l.cwd && !exists(l.cwd) ? S.err : S.base)
     field('started', formatAgo(l.startedAt))
     field('pid', `${l.pid}${l.kind && l.kind !== 'interactive' ? `  (${l.kind})` : ''}`, S.dim)
-
-    const file = Sessions.transcriptFor(l)
-    const act = file ? Sessions.readActivity(file) : null
 
     if (act) {
       if (act.model) field('model', act.model.replace(/^claude-/, ''))
@@ -200,26 +223,58 @@ export class DispatchScreen {
       if (stats.length) field('turn', stats.join('  ·  '))
     }
 
+    // Subagents, from two different signals:
+    //
+    //   active     sidechain transcripts being written to right now. This is
+    //              the only thing that catches an agent mid-flight, because
+    //              the parent transcript records a dispatch and its result
+    //              together, after the fact.
+    //   dispatched what the parent transcript says ran, with types and the
+    //              task each was given. Accurate, but only after completion.
+    const agents = file ? Sessions.readAgents(file) : []
+    const activity = Sessions.subagentActivity(l)
+    if ((agents.length || activity.total) && cy < y + h - 3) {
+      cy++
+      scr.put(x, cy, 'subagents', S.heading)
+      let sx2 = x + 10
+      if (activity.active) {
+        sx2 = scr.put(sx2, cy, `${statusGlyph('busy')} ${activity.active} active`, statusStyleAt('busy'))
+        sx2 = scr.put(sx2, cy, '  ', S.base)
+      }
+      scr.put(sx2, cy, `${agents.length || activity.total} dispatched`, S.dim)
+      cy++
+
+      for (const f of activity.files.slice(0, 3)) {
+        if (cy >= y + h - 2) break
+        scr.put(x, cy, statusGlyph('busy'), statusStyleAt('busy'))
+        scr.put(x + 2, cy, fit(f.id.slice(0, 12), 14), S.base)
+        scr.put(x + 17, cy, fit(formatBytes(f.size), 6, 'right'), S.dim)
+        scr.put(x + 24, cy, `wrote ${Math.round(f.age / 1000)}s ago`, S.muted)
+        cy++
+      }
+
+      // Most recent dispatches, newest first. No duration: the timestamps are
+      // written together, so any figure here would be milliseconds and a lie.
+      for (const a of agents.slice(0, 4)) {
+        if (cy >= y + h - 2) break
+        scr.put(x, cy, '·', S.dim)
+        scr.put(x + 2, cy, fit(a.type, 20), S.muted)
+        if (a.label && w > 26) scr.put(x + 23, cy, truncate(a.label, w - 23), S.dim)
+        cy++
+      }
+    }
+
     // Current activity — the newest thing in the transcript.
-    if (act?.activity && cy < y + h - 4) {
+    if (act?.activity && cy < y + h - 3) {
       cy++
       const label = act.activityKind === 'tool' ? 'running'
         : act.activityKind === 'user' ? 'you said'
         : 'saying'
       scr.put(x, cy, label, S.heading); cy++
       const style = act.activityKind === 'tool' ? S.info : S.base
-      for (const line of wrap(act.activity, w).slice(0, 4)) {
-        if (cy >= y + h - 2) break
-        scr.put(x, cy, line, style); cy++
-      }
-    }
-
-    if (act?.lastPrompt && act.activityKind !== 'user' && cy < y + h - 3) {
-      cy++
-      scr.put(x, cy, 'last prompt', S.heading); cy++
-      for (const line of wrap(act.lastPrompt, w).slice(0, 3)) {
+      for (const line of wrap(act.activity, w).slice(0, 3)) {
         if (cy >= y + h - 1) break
-        scr.put(x, cy, line, S.muted); cy++
+        scr.put(x, cy, line, style); cy++
       }
     }
 

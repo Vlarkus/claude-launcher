@@ -331,6 +331,139 @@ export function readActivity(file) {
   return out
 }
 
+// ── Subagents ────────────────────────────────────────────────────────
+//
+// Whether a session has agents running is decided from the parent transcript,
+// not from the files in subagents/: a dispatch is a `tool_use` named Agent or
+// Task, and it is finished when a `tool_result` carries the matching id. An
+// unmatched dispatch is still running.
+//
+// The subagent transcripts cannot be tied back to a specific dispatch — the
+// parent records carry no promptId — so cl does not pretend to. It reports the
+// dispatches, which it can be sure of.
+//
+// Parsing is incremental: only the bytes appended since the last call are
+// read, so watching a busy 3MB transcript costs nothing per frame.
+
+const agentState = new Map() // file -> { offset, agents: Map, mtime }
+
+const AGENT_TOOLS = new Set(['Agent', 'Task'])
+
+function agentLabel(input = {}) {
+  return input.description
+    || (typeof input.prompt === 'string' ? cleanPrompt(input.prompt).slice(0, 60) : '')
+    || ''
+}
+
+export function readAgents(file) {
+  let st
+  try { st = fs.statSync(file) } catch { return [] }
+
+  let state = agentState.get(file)
+  // A shrunk file means it was replaced; start over rather than read garbage.
+  if (!state || st.size < state.offset) {
+    state = { offset: 0, agents: new Map(), mtime: 0 }
+    agentState.set(file, state)
+  }
+  if (st.size === state.offset) return summariseAgents(state)
+
+  let fd
+  try { fd = fs.openSync(file, 'r') } catch { return summariseAgents(state) }
+  try {
+    const len = st.size - state.offset
+    const buf = Buffer.alloc(len)
+    fs.readSync(fd, buf, 0, len, state.offset)
+    const text = buf.toString('utf8')
+
+    // Stop at the last complete line; the tail may be mid-write.
+    const lastNl = text.lastIndexOf('\n')
+    if (lastNl === -1) return summariseAgents(state)
+    state.offset += Buffer.byteLength(text.slice(0, lastNl + 1), 'utf8')
+
+    parseLines(text.slice(0, lastNl + 1), (o) => {
+      if (o.isSidechain) return
+      const m = o.message
+      if (!m) return
+      const ts = Date.parse(o.timestamp) || Date.now()
+      for (const b of m.content || []) {
+        if (!b || typeof b !== 'object') continue
+        if (b.type === 'tool_use' && AGENT_TOOLS.has(b.name)) {
+          state.agents.set(b.id, {
+            id: b.id,
+            type: b.input?.subagent_type || b.input?.agentType || 'agent',
+            label: agentLabel(b.input),
+            startedAt: ts,
+            endedAt: null,
+          })
+        } else if (b.type === 'tool_result' && state.agents.has(b.tool_use_id)) {
+          const a = state.agents.get(b.tool_use_id)
+          if (a.endedAt === null) a.endedAt = ts
+        }
+      }
+    })
+  } finally {
+    fs.closeSync(fd)
+  }
+  state.mtime = st.mtimeMs
+  return summariseAgents(state)
+}
+
+function summariseAgents(state) {
+  return [...state.agents.values()].sort((a, b) => {
+    // Running first, newest dispatch first within each group.
+    const ra = a.endedAt === null ? 0 : 1
+    const rb = b.endedAt === null ? 0 : 1
+    return ra - rb || b.startedAt - a.startedAt
+  })
+}
+
+// Dispatches with no result yet. In practice this is almost always empty:
+// Claude writes the tool_use and tool_result records together once the tool
+// has finished, so an agent that is still working has not been written to the
+// parent transcript at all. Kept because it is correct when it does fire, but
+// `subagentActivity` is the signal that actually catches live work.
+export function runningAgents(file) {
+  return readAgents(file).filter((a) => a.endedAt === null)
+}
+
+// Live subagent work, inferred from the sidechain transcripts being appended
+// to. Unlike the parent transcript these are written as the agent works, so a
+// file touched seconds ago means an agent is running right now.
+//
+// This is a heuristic — it reads file activity, not a status field, because
+// Claude publishes no such field for subagents. A file also gets one final
+// write on completion, so an agent can look "active" for ACTIVE_MS after it
+// finishes.
+const ACTIVE_MS = 25_000
+
+export function subagentActivity(live, now = Date.now()) {
+  const out = { active: 0, total: 0, newest: 0, files: [] }
+  if (!live?.cwd || !live?.id) return out
+  const dir = path.join(P.projects, encodeProject(live.cwd), live.id, 'subagents')
+  if (!exists(dir)) return out
+  let entries
+  try { entries = fs.readdirSync(dir) } catch { return out }
+  for (const name of entries) {
+    if (!name.endsWith('.jsonl')) continue
+    let st
+    try { st = fs.statSync(path.join(dir, name)) } catch { continue }
+    out.total++
+    if (st.mtimeMs > out.newest) out.newest = st.mtimeMs
+    const age = now - st.mtimeMs
+    if (age <= ACTIVE_MS) {
+      out.active++
+      out.files.push({
+        id: name.replace(/^agent-/, '').replace(/\.jsonl$/, ''),
+        mtime: st.mtimeMs,
+        size: st.size,
+        age,
+      })
+    }
+  }
+  out.files.sort((a, b) => b.mtime - a.mtime)
+  return out
+}
+
 // Path to a live session's transcript, if it exists.
 export function transcriptFor(live) {
   if (!live?.cwd || !live?.id) return null

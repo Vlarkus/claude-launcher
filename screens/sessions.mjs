@@ -5,7 +5,7 @@
 // from shell to conversation.
 
 import path from 'node:path'
-import { S, statusStyle, statusGlyph } from '../tui/theme.mjs'
+import { S, statusStyle, statusStyleAt, statusGlyph } from '../tui/theme.mjs'
 import { List, confirm, promptText, listMouse } from '../tui/widgets.mjs'
 import { truncate, fit, wrap, stringWidth } from '../tui/width.mjs'
 import * as Sessions from '../data/sessions.mjs'
@@ -194,7 +194,7 @@ export class SessionsScreen {
 
       let mark = '  '
       let markStyle = S.dim
-      if (item.live) { mark = ' ' + statusGlyph(item.live.status); markStyle = statusStyle(item.live.status) }
+      if (item.live) { mark = ' ' + statusGlyph(item.live.status); markStyle = statusStyleAt(item.live.status) }
       else if (item.pinned) { mark = ' ★'; markStyle = S.warn }
 
       return [

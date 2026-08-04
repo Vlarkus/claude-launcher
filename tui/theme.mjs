@@ -94,8 +94,9 @@ export const S = {
 // colour and everything else stays quiet.
 export function statusStyle(status) {
   switch (status) {
-    case 'waiting': return S.warn
-    case 'busy': return S.info
+    // Red, so it cannot be confused with the orange/yellow "working" pulse.
+    case 'waiting': return S.err
+    case 'busy': return S.warn
     case 'idle': return S.muted
     case 'live': return S.ok
     case 'gone': return S.dim
@@ -104,22 +105,46 @@ export function statusStyle(status) {
   }
 }
 
-// A rotating arc rather than braille. Braille dots jump between visually
-// unrelated shapes, which looks like flicker unless the frame rate is high;
-// these read as one shape turning, so the motion stays legible.
-const SPINNER = ['◜', '◠', '◝', '◞', '◡', '◟']
 export const SPINNER_MS = 90
 
-// Glyph for a status. The frame comes from the clock so no animation state has
-// to be threaded through the screens — but the caller must redraw at roughly
-// SPINNER_MS for it to look like rotation rather than noise.
-export function statusGlyph(status, now = Date.now()) {
-  switch (status) {
-    case 'busy': return SPINNER[Math.floor(now / SPINNER_MS) % SPINNER.length]
-    case 'waiting': return '!'
-    case 'idle': return '○'
-    default: return '·'
+// Status is carried by colour, not by glyph shape.
+//
+// Spinner glyphs — braille, arcs, box-drawing — depend on the terminal font
+// having them, and a missing glyph renders as a box or collapses the column.
+// ● and ○ are in essentially every monospace font, so the only thing that
+// animates is the colour of a dot that is always there.
+//
+// Shape still carries a second signal for anyone who cannot separate the
+// hues: filled means the session is live, hollow means it is sitting idle.
+export function statusGlyph(status) {
+  return status === 'idle' ? '○' : '●'
+}
+
+// Warm pulse for "working": orange ⇄ yellow, one cycle per second. Rendered
+// from the clock so no animation state is threaded through the screens — the
+// caller just has to redraw at roughly SPINNER_MS.
+const PULSE_MS = 1000
+const PULSE_A = [255, 140, 40]   // orange
+const PULSE_B = [255, 232, 130]  // yellow
+const PULSE_256 = [208, 214, 220, 226, 220, 214]
+const PULSE_16 = ['33', '93']
+
+export function pulseStyle(now = Date.now()) {
+  if (!hasColor) return ''
+  // Sine rather than a hard alternation: a blink reads as an error state,
+  // a breath reads as activity.
+  const t = (Math.sin((now / PULSE_MS) * Math.PI * 2) + 1) / 2
+  if (depth >= 24) {
+    const c = PULSE_A.map((a, i) => Math.round(a + (PULSE_B[i] - a) * t))
+    return `38;2;${c[0]};${c[1]};${c[2]}`
   }
+  if (depth >= 8) return `38;5;${PULSE_256[Math.floor(now / 160) % PULSE_256.length]}`
+  return PULSE_16[Math.floor(now / 400) % PULSE_16.length]
+}
+
+// Style for a status, animated where that means something.
+export function statusStyleAt(status, now = Date.now()) {
+  return status === 'busy' ? pulseStyle(now) : statusStyle(status)
 }
 
 // Colour for a filled gauge: calm until it matters, loud when it does.

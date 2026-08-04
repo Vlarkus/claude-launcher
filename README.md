@@ -83,11 +83,23 @@ the count, not the model name: a 1M-context session still reports itself as
 plain `claude-opus-5`, so the only honest signal is that it has already passed
 200k.
 
+Status is carried by colour, not by glyph shape: `●` pulses orange-to-yellow
+while working, is red when it needs you, and `○` grey when idle. Spinner
+glyphs depend on the terminal font having them; a dot does not. Filled versus
+hollow gives a second, non-colour signal.
+
+Subagents appear under the session that dispatched them, with a `+N` marker in
+the list. Two different signals feed this, and they are labelled separately:
+**active** means a sidechain transcript was written to in the last 25 seconds
+— the only thing that catches an agent mid-flight — while **dispatched** comes
+from the parent transcript, which records a tool call and its result together
+*after* the fact. No durations are shown for dispatches, because those two
+timestamps land milliseconds apart and any figure would be a lie.
+
 Updates on its own: a one-second poll plus a watch on `sessions/`, so status
 changes appear without touching the keyboard. While something is working the
-redraw rate rises to the spinner's frame rate, so the animation reads as
-rotation rather than flicker. A `!` in the header appears on every screen when
-a session is waiting on input.
+redraw rate rises to the pulse's frame rate. A `!` in the header appears on
+every screen when a session is waiting on input.
 
 **2 Sessions** — every session ever run, grouped Live / Pinned / Recent, with
 detail on the right. `enter` resumes, `p` pins, `x` deletes, `/` filters.
