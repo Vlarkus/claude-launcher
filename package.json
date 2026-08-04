@@ -1,7 +1,7 @@
 {
   "name": "claude-launcher",
   "version": "2.1.0",
-  "description": "A terminal front-end for Claude Code \u2014 sessions, launching, config and usage stats, in the spirit of lazygit.",
+  "description": "A terminal front-end for Claude Code — sessions, launching, config and usage stats, in the spirit of lazygit.",
   "keywords": [
     "claude",
     "claude-code",
