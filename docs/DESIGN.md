@@ -83,16 +83,16 @@ Landing screen. The fast lane: arrow, Enter, you are in.
 
     cl                                     opus·1m · high · 6 plugins ─┐
     ─────────────────────────────────────┬──────────────────────────────
-     LIVE                                │ SysConfig
-     ● SysConfig      ~/          busy   │ ──────────────────────────────
+     LIVE                                │ launcher rewrite
+     ● launcher rewrite  ~/       busy   │ ──────────────────────────────
                                          │ project   ~/
      PINNED                              │ started   2m ago
-     ★ hero backgrounds  web-app  1h    │ model     opus·1m
+     ★ landing page      web-app   1h    │ model     opus·1m
      ★ vision pipeline   robotics  14d   │ size      344 KB · 148 msgs
                                          │ status    ● busy (pid 35444)
      RECENT                              │
-       arc refactor      arc        3d   │ last prompt
-       timeline sweep    timeline  12d   │ "lazygit has that layout cuz…"
+       api refactor      api        3d   │ last prompt
+       timeline sweep    charts    12d   │ "make the layout read like lazygit…"
        donation form     payments  21d   │
     ─────────────────────────────────────┴──────────────────────────────
      enter resume  n new  p pin  x delete  / search  1234 screens  ? q
@@ -161,12 +161,12 @@ Disk and history management.
     cl · data                                          217 MB across 25 projects
     ─────────────────────────────────────┬──────────────────────────────
      PROJECTS                            │ robotics
-     ▸ robotics            76M   31  │ ──────────────────────────────
-       timeline                63M   28  │ path    ~/Claude Projects/…
-       acme-new-website        25M   19  │ exists  yes
-       sandbox            9.8M   12  │ 31 sessions · 76 MB
+     ▸ robotics                76M   31  │ ──────────────────────────────
+       charts                  63M   28  │ path    ~/projects/robotics
+       web-app                 25M   19  │ exists  yes
+       sandbox                9.8M   12  │ 31 sessions · 76 MB
        ~/                     2.5M   16  │ oldest  2026-02-11
-       arc (deleted)           1.2M    4 │ newest  2026-07-28
+       api (deleted)           1.2M    4 │ newest  2026-07-28
                                          │
      CACHES                              │ sessions
        cache/                  41M       │   vision pipeline      14d  8M
