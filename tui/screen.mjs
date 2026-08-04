@@ -30,6 +30,8 @@ export class Screen {
     // Off in a pipe: the escape codes would be written into whatever is
     // capturing the output.
     this.mouse = out.isTTY !== false
+    this.titles = out.isTTY !== false
+    this._title = null
     this._resizeHandler = () => {
       this.#measure()
       this.prev = [] // force a full repaint
@@ -46,11 +48,24 @@ export class Screen {
   // 1000 reports button presses and the wheel; 1006 asks for the SGR encoding,
   // which is the only one that survives past column 223. Both are turned off on
   // the way out so the terminal is not left emitting escape codes.
+  // Terminal title. Pushed onto the title stack on the way in and popped on
+  // the way out, so whatever the shell had set comes back — tmux, xterm and
+  // the common terminals all implement 22/23;2t. This is the second half of
+  // the naming story: process.title covers tmux's automatic-rename and `ps`,
+  // this covers terminals that show an explicit title.
+  setTitle(text) {
+    if (!this.titles || text === this._title) return
+    this._title = text
+    // OSC 2, BEL-terminated: the widest-supported form.
+    this.out.write(`\x1b]2;${String(text).replace(/[\x00-\x1f]/g, '')}\x07`)
+  }
+
   enter() {
     if (this.entered) return
     this.entered = true
     this.out.write(CSI + '?1049h' + CSI + '?25l' + CSI + '2J' + CSI + 'H')
     if (this.mouse) this.out.write(CSI + '?1000h' + CSI + '?1006h')
+    if (this.titles) this.out.write(CSI + '22;2t') // push the current title
     this.out.on('resize', this._resizeHandler)
   }
 
@@ -59,6 +74,7 @@ export class Screen {
     this.entered = false
     this.out.removeListener('resize', this._resizeHandler)
     if (this.mouse) this.out.write(CSI + '?1006l' + CSI + '?1000l')
+    if (this.titles) { this.out.write(CSI + '23;2t'); this._title = null } // pop
     this.out.write(CSI + '0m' + CSI + '?25h' + CSI + '?1049l')
   }
 

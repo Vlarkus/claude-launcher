@@ -191,6 +191,26 @@ at an older checkout. Re-running is safe.
 
 `npm link` also works if you prefer that.
 
+### Naming
+
+The shim runs `exec node .../cl.mjs`, so without help the process is called
+`node` — which is what tmux's `automatic-rename` puts in the window list, and
+what `ps` and `pkill` see. cl sets its process name to `cl` at startup, and
+also sets the terminal title, pushing and popping the title stack so your
+shell's title comes back on exit.
+
+```
+CL_PROCESS_NAME=lc    what ps and tmux automatic-rename show
+CL_TITLE="whatever"   pin the terminal title
+```
+
+The title carries state, so a background pane is still worth glancing at:
+`cl` when idle, `cl · 2 running`, and `cl ! 1` when a session needs you.
+
+If tmux still shows something else, `automatic-rename` may be off for that
+window — `tmux setw automatic-rename on`, or rely on the title instead with
+`tmux set -g set-titles on`.
+
 ### Where things live
 
 | | |

@@ -10,6 +10,14 @@
 //   cl doctor        check the installation
 //   cl hook …        run a portable hook action (see hook.mjs)
 
+// Rename the process before anything else.
+//
+// The shim runs `exec node …/cl.mjs`, so without this the process really is
+// called "node" — which is what tmux's automatic-rename shows in the window
+// list, and what `ps` and `pkill` see. Setting it here rewrites argv, so all
+// three agree. CL_PROCESS_NAME overrides it.
+process.title = process.env.CL_PROCESS_NAME || 'cl'
+
 import { App } from './app.mjs'
 import { DispatchScreen } from './screens/dispatch.mjs'
 import { SessionsScreen } from './screens/sessions.mjs'

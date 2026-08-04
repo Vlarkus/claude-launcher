@@ -187,6 +187,21 @@ export class App {
       message: this.message,
       messageStyle: this.messageStyle,
     })
+
+    scr.setTitle(this.windowTitle())
+  }
+
+  // What the terminal (and the tmux window, when automatic-rename is off)
+  // shows. Carries the one thing worth seeing without switching to the pane:
+  // whether something is waiting on you.
+  windowTitle() {
+    if (process.env.CL_TITLE) return process.env.CL_TITLE
+    const live = this.live ?? []
+    const waiting = live.filter((l) => l.status === 'waiting').length
+    const busy = live.filter((l) => l.status === 'busy').length
+    if (waiting) return `cl ! ${waiting}`
+    if (busy) return `cl · ${busy} running`
+    return 'cl'
   }
 
   render() {
