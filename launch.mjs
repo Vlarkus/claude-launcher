@@ -112,7 +112,7 @@ export function displayCommand(cfg) {
 // Resolving it ourselves avoids spawning through a shell. Passing an args
 // array with shell:true concatenates rather than escapes them (Node DEP0190),
 // which would break any argument containing a space — an opening prompt, or a
-// path like "G:\My Drive\...".
+// path like "D:\My Files\...".
 export function resolveExecutable(name) {
   const exts = IS_WINDOWS
     ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)

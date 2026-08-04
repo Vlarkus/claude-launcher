@@ -68,8 +68,8 @@ export function exists(p) {
 
 // Claude encodes a working directory into a project folder name by replacing
 // every character outside [A-Za-z0-9] with '-'.
-//   C:\Users\you            → C--Users-you
-//   /home/you/src/app       → -home-you-src-app
+//   C:\Users\you              → C--Users-you
+//   /home/you/src/app         → -home-you-src-app
 export function encodeProject(cwd) {
   return cwd.replace(/[^A-Za-z0-9]/g, '-')
 }
