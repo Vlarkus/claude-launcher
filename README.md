@@ -1,4 +1,4 @@
-# lazy-claude
+# claude-launcher
 
 A terminal front-end for Claude Code — everything before, between and around a
 session. Claude owns what happens during one.
@@ -6,8 +6,8 @@ session. Claude owns what happens during one.
 Node 18+, **zero dependencies**, one command: `cl`. Windows, macOS and Linux.
 
 ```sh
-git clone https://github.com/<you>/lazy-claude.git ~/src/lazy-claude
-cd ~/src/lazy-claude && ./install.sh      # Windows: powershell -File install.ps1
+git clone https://github.com/Vlarkus/claude-launcher.git ~/src/claude-launcher
+cd ~/src/claude-launcher && ./install.sh      # Windows: powershell -File install.ps1
 cl
 ```
 

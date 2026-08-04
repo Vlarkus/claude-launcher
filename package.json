@@ -1,7 +1,7 @@
 {
-  "name": "lazy-claude",
+  "name": "claude-launcher",
   "version": "2.1.0",
-  "description": "A terminal front-end for Claude Code — sessions, launching, config and usage stats, in the spirit of lazygit.",
+  "description": "A terminal front-end for Claude Code \u2014 sessions, launching, config and usage stats, in the spirit of lazygit.",
   "keywords": [
     "claude",
     "claude-code",
@@ -48,5 +48,14 @@
     "win32",
     "darwin",
     "linux"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vlarkus/claude-launcher.git"
+  },
+  "homepage": "https://github.com/Vlarkus/claude-launcher#readme",
+  "bugs": {
+    "url": "https://github.com/Vlarkus/claude-launcher/issues"
+  },
+  "author": "Vlarkus"
 }
