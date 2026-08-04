@@ -227,5 +227,8 @@ screens/config/       defaults, hooks, permissions, lists, misc, rawjson
 - Plugin enablement is persistent, not per-session. There is no CLI flag for
   it, so toggling a plugin writes `settings.json` and says so. The previous
   launcher's plugin checkboxes did nothing.
-- `archive/` holds the PowerShell launcher and its presets. `migrate.mjs`
-  imported the launch profile and all eight hook presets into `state.json`.
+- `migrate.mjs` imports launch profiles and hook presets from the PowerShell
+  launcher this replaced. The originals live in `<data dir>/archive/`, outside
+  the repo — they contain absolute home paths and are not shareable.
+- Hook commands store an absolute path to `hook.mjs`. Move the checkout and
+  they point at nothing; `cl doctor` and `install.mjs` both report that.
