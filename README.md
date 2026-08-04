@@ -1,9 +1,19 @@
-# cl
+# lazy-claude
 
-A terminal front-end for Claude Code. Everything before, between and around a
-session; Claude owns what happens during one.
+A terminal front-end for Claude Code — everything before, between and around a
+session. Claude owns what happens during one.
 
-Node, no dependencies. Windows, macOS and Linux.
+Node 18+, **zero dependencies**, one command: `cl`. Windows, macOS and Linux.
+
+```sh
+git clone https://github.com/<you>/lazy-claude.git ~/src/lazy-claude
+cd ~/src/lazy-claude && ./install.sh      # Windows: powershell -File install.ps1
+cl
+```
+
+The installer writes a small `cl` shim pointing back at wherever you cloned it,
+and tells you if that directory is not on your PATH. `./install.sh --check`
+reports without changing anything.
 
 ```
 cl                    open the launcher
@@ -152,21 +162,48 @@ them. `cl doctor` reports any that would not survive a move.
 
 ## Install
 
-```
-# Windows
-powershell -ExecutionPolicy Bypass -File install.ps1
+Clone anywhere; nothing assumes a particular location.
 
-# macOS / Linux
-./install.sh
+```sh
+./install.sh              # macOS / Linux  -> ~/.local/bin/cl
+./install.sh --check      # report only, change nothing
 ```
 
-Both write a `cl` shim and check that its directory is on PATH. Re-running is
-safe.
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1    # -> %USERPROFILE%in\cl.cmd
+```
+
+Both call `install.mjs`, which resolves the checkout's own path, writes the
+shim, warns if its directory is not on PATH, and reports hooks still pointing
+at an older checkout. Re-running is safe.
+
+`npm link` also works if you prefer that.
+
+### Where things live
+
+| | |
+|---|---|
+| **Code** | wherever you cloned it — resolved at runtime, never assumed |
+| **State** | `~/.claude/launcher/` (pins, profiles, backups) — override with `CL_DATA_DIR` |
+| **Claude's config** | `~/.claude/` — override with `CLAUDE_CONFIG_DIR`, which cl honours |
+
+State lives outside the checkout on purpose, so `git pull` never touches your
+pins or profiles and the working tree stays clean.
+
+### Updating
+
+```sh
+git -C <checkout> pull
+```
+
+That is all — unless the checkout moved, in which case re-run the installer so
+the shim and any hook commands point at the new path.
 
 ## Layout
 
 ```
 cl.mjs                entry: argument parsing, screen loop
+install.mjs           cross-platform shim installer
 app.mjs               shell: screen stack, key loop, launch transition
 launch.mjs            config → argv, and running claude
 hook.mjs              portable hook shim

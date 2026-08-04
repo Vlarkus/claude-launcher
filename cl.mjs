@@ -20,7 +20,18 @@ import { DataScreen } from './screens/data.mjs'
 import { emptyConfig, runClaude } from './launch.mjs'
 import { pruneStaleLiveFiles } from './data/sessions.mjs'
 
-const VERSION = '2.0.0'
+// Read from package.json so the two can never drift.
+const VERSION = await (async () => {
+  try {
+    const { readFileSync } = await import('node:fs')
+    const { fileURLToPath } = await import('node:url')
+    const { dirname, join } = await import('node:path')
+    const here = dirname(fileURLToPath(import.meta.url))
+    return JSON.parse(readFileSync(join(here, 'package.json'), 'utf8')).version
+  } catch {
+    return 'unknown'
+  }
+})()
 
 const HELP = `
   cl — front-end for Claude Code

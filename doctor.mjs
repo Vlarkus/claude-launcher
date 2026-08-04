@@ -61,6 +61,11 @@ export async function doctor() {
   }
 
   section('paths')
+  ok('checkout', tildify(P.self))
+  ok('state', `${tildify(P.launcher)}${process.env.CL_DATA_DIR ? '  (CL_DATA_DIR)' : ''}`)
+  if (path.resolve(P.self).toLowerCase() === path.resolve(P.launcher).toLowerCase()) {
+    warn('layout', 'code and state share a directory — a pull will collide with your state')
+  }
   checkPath('config dir', P.claudeDir, true)
   checkPath('projects', P.projects, false)
   checkPath('sessions', P.sessions, false)
@@ -84,6 +89,21 @@ export async function doctor() {
   const shimStatus = checkShim()
 
   section('hooks')
+  // Hook commands store an absolute path to hook.mjs. Move or re-clone the
+  // checkout and they point at nothing — and a hook that cannot run fails
+  // silently, so it is worth saying out loud.
+  {
+    const u = Settings.load('user')
+    if (!u.error) {
+      const stale = Settings.listHooks(u.data)
+        .filter((h) => /hook\.mjs/.test(h.command) && !h.command.includes(P.self))
+      if (stale.length) {
+        bad('shim path', `${stale.length} hook(s) point at a different checkout`)
+        for (const h of stale) print(' ', '', `\x1b[90m${h.event}: ${h.command.slice(0, 62)}\x1b[0m`)
+        print(' ', '', '\x1b[90mfix: Config → Hooks → e, or re-run install\x1b[0m')
+      }
+    }
+  }
   const user = Settings.load('user')
   if (user.error) {
     bad('hooks', 'cannot read settings.json')

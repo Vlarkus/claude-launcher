@@ -4,6 +4,7 @@
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 export const HOME = os.homedir()
 export const PLATFORM = process.platform // 'win32' | 'darwin' | 'linux'
@@ -14,7 +15,17 @@ export const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR
   ? path.resolve(process.env.CLAUDE_CONFIG_DIR)
   : path.join(HOME, '.claude')
 
-export const LAUNCHER_DIR = path.join(CLAUDE_DIR, 'launcher')
+// Where the code lives, resolved from this module rather than assumed. The
+// repo can be cloned anywhere — the hook shim path in settings.json has to
+// point at wherever that turned out to be.
+export const SELF_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+// Where cl keeps its own state. Deliberately separate from SELF_DIR so a
+// `git pull` never touches your pins, profiles or backups, and so the checkout
+// stays clean. CL_DATA_DIR overrides it.
+export const LAUNCHER_DIR = process.env.CL_DATA_DIR
+  ? path.resolve(process.env.CL_DATA_DIR)
+  : path.join(CLAUDE_DIR, 'launcher')
 
 export const P = {
   claudeDir: CLAUDE_DIR,
@@ -29,11 +40,15 @@ export const P = {
   claudeMd: path.join(CLAUDE_DIR, 'CLAUDE.md'),
   plugins: path.join(CLAUDE_DIR, 'plugins'),
 
+  // Data — safe to delete, never in the repo.
   launcher: LAUNCHER_DIR,
   state: path.join(LAUNCHER_DIR, 'state.json'),
   backups: path.join(LAUNCHER_DIR, 'backups'),
-  hookShim: path.join(LAUNCHER_DIR, 'hook.mjs'),
   archive: path.join(LAUNCHER_DIR, 'archive'),
+
+  // Code — wherever this checkout lives.
+  self: SELF_DIR,
+  hookShim: path.join(SELF_DIR, 'hook.mjs'),
 }
 
 // Directories whose size is worth showing on the Data screen.

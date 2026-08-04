@@ -1,0 +1,52 @@
+{
+  "name": "lazy-claude",
+  "version": "2.1.0",
+  "description": "A terminal front-end for Claude Code — sessions, launching, config and usage stats, in the spirit of lazygit.",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "tui",
+    "terminal",
+    "launcher",
+    "lazygit"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "cl": "cl.mjs"
+  },
+  "main": "cl.mjs",
+  "exports": {
+    ".": "./cl.mjs",
+    "./hook": "./hook.mjs"
+  },
+  "files": [
+    "cl.mjs",
+    "app.mjs",
+    "launch.mjs",
+    "hook.mjs",
+    "doctor.mjs",
+    "migrate.mjs",
+    "tui/",
+    "data/",
+    "screens/",
+    "install.sh",
+    "install.ps1",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node cl.mjs",
+    "doctor": "node cl.mjs doctor",
+    "install-shim": "node install.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {},
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ]
+}
