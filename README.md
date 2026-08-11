@@ -71,7 +71,11 @@ live session, sorted so anything waiting on you comes first, then whatever is
 working, then idle. The detail pane shows the model, context as a gauge, output
 tokens, tool count, and the current activity — the tool being run or the text
 being written — read from the tail of the transcript. `w` jumps to the next
-session that needs you.
+session that needs you; `R` and `C` rename and recolour it, as on Sessions.
+
+The name shown is the transcript's title where there is one, not the name in
+`sessions/<pid>.json` — Claude owns that file and does not rewrite it on a
+rename, so a rename made here would otherwise be invisible.
 
 ```
 context  522k / 1M                          52%
@@ -104,16 +108,16 @@ every screen when a session is waiting on input.
 **2 Sessions** — every session ever run, grouped Live / Pinned / Recent, with
 detail on the right. `enter` resumes, `p` pins, `x` deletes, `/` filters.
 
-`R` renames a chat and `C` sets its accent colour. Both are Claude's own,
-not cl labels: they are written to the transcript as the same `custom-title`
-and `agent-color` records Claude writes itself, so the new name and colour show
-up inside Claude too, and the eight colours are the eight Claude accepts. `p`
-still pins, and `P` still renames a pin — that one is a cl-local label that
-Claude never sees.
+`R` renames a chat and `C` sets its accent colour — here and on Dispatch. Both
+are Claude's own, not cl labels: they are written to the transcript as the same
+`custom-title` and `agent-color` records Claude writes itself, so the new name
+and colour show up inside Claude too, and the eight colours offered are the
+eight Claude accepts. `p` still pins, and `P` still renames a pin — that one is
+a cl-local label Claude never sees.
 
 Renaming a *running* session asks first. Claude holds the title and colour in
 memory and re-appends both when it next saves, so a change made from outside
-would be silently undone; set those from inside the session instead.
+can be silently undone; setting them inside the session always sticks.
 
 **3 Launch** — everything that becomes a CLI argument: model, effort, agent,
 name, directory, prompt, and the flag groups. The resulting command is rendered

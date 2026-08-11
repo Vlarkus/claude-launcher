@@ -482,6 +482,27 @@ export function subagentActivity(live, now = Date.now()) {
 }
 
 // Path to a live session's transcript, if it exists.
+// Title and colour for a live session, cached on the file's identity.
+//
+// Dispatch needs these per row at animation rate, and readSessionMeta samples
+// 16 KB of head and 128 KB of tail — far too much to repeat 11 times a second.
+// The live session's own name comes from sessions/<pid>.json, which Claude
+// owns and does not rewrite when the transcript is renamed, so the transcript
+// is the only place a rename made here can be seen.
+const labelCache = new Map()
+
+export function readLabel(file) {
+  if (!file) return { title: null, color: null }
+  let st
+  try { st = fs.statSync(file) } catch { return { title: null, color: null } }
+  const hit = labelCache.get(file)
+  if (hit && hit.size === st.size && hit.mtime === st.mtimeMs) return hit.label
+  const meta = readSessionMeta(file)
+  const label = { title: meta?.title || meta?.agentName || null, color: meta?.color || null }
+  labelCache.set(file, { size: st.size, mtime: st.mtimeMs, label })
+  return label
+}
+
 export function transcriptFor(live) {
   if (!live?.cwd || !live?.id) return null
   const dir = path.join(P.projects, encodeProject(live.cwd))

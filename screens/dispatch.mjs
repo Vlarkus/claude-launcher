@@ -11,8 +11,8 @@
 // nothing.
 
 import fs from 'node:fs'
-import { S, statusStyle, statusStyleAt, statusGlyph, statusLabel, gaugeStyle } from '../tui/theme.mjs'
-import { List, confirm, drawBar, fmtTokens, listMouse } from '../tui/widgets.mjs'
+import { S, statusStyle, statusStyleAt, statusGlyph, statusLabel, gaugeStyle, agentStyle } from '../tui/theme.mjs'
+import { List, confirm, promptText, chooseFrom, drawBar, fmtTokens, listMouse } from '../tui/widgets.mjs'
 import { truncate, fit, wrap, stringWidth } from '../tui/width.mjs'
 import * as Sessions from '../data/sessions.mjs'
 import { tildify, shortProject, formatAge, formatAgo, formatBytes, exists } from '../data/paths.mjs'
@@ -24,15 +24,21 @@ export class DispatchScreen {
   id = 'dispatch'
   title = 'Dispatch'
   keys = [
-    ['enter', 'attach'], ['o', 'folder'], ['n', 'new'],
-    ['w', 'next waiting'], ['r', 'refresh'], ['?', 'help'],
+    ['enter', 'attach'], ['R', 'rename'], ['C', 'colour'], ['o', 'folder'],
+    ['n', 'new'], ['w', 'next waiting'], ['?', 'help'],
   ]
   help = [
     'enter        resume the highlighted session',
+    'R            rename the chat — Claude sees this too',
+    'C            set the chat\'s accent colour',
     'o            open its working directory',
     'n            start a new session (opens Launch)',
     'w            jump to the next session waiting on you',
     'r            refresh now',
+    '',
+    'Everything here is running, and a running Claude re-writes the title and',
+    'colour from memory when it next saves — so R and C ask first, and the',
+    'change may not survive. Setting them inside the session always sticks.',
     '',
     'Updates on its own once a second, and immediately when Claude writes a',
     'status change. A session is "waiting" when it needs input from you.',
@@ -125,7 +131,8 @@ export class DispatchScreen {
       if (item.kind === 'empty') return [{ text: '  nothing running', style: S.dim }]
       const l = item.live
       const st = statusStyleAt(l.status, now)
-      const name = l.name || l.id.slice(0, 8)
+      const label = Sessions.readLabel(Sessions.transcriptFor(l))
+      const name = label.title || l.name || l.id.slice(0, 8)
       const proj = shortProject(l.cwd) || ''
       const age = formatAge(l.statusUpdatedAt || l.updatedAt)
 
@@ -141,7 +148,9 @@ export class DispatchScreen {
 
       return [
         { text: ' ' + statusGlyph(l.status) + ' ', style: st },
-        { text: fit(name, nameW), style: l.status === 'waiting' ? S.title : S.base },
+        // The accent rides on the name; the status dot keeps its own colour so
+        // a user-chosen red can never read as "needs you".
+        { text: fit(name, nameW), style: agentStyle(label.color) || (l.status === 'waiting' ? S.title : S.base) },
         { text: agentTag ? fit(agentTag, tagW) : '', style: statusStyleAt('busy', now) },
         { text: fit(proj, projW), style: S.muted },
         { text: fit(age, ageW, 'right'), style: S.dim },
@@ -158,7 +167,9 @@ export class DispatchScreen {
     const l = item.live
     let cy = y
 
-    scr.put(x, cy, truncate(l.name || l.id.slice(0, 8), w), S.title); cy++
+    const label = Sessions.readLabel(Sessions.transcriptFor(l))
+    scr.put(x, cy, truncate(label.title || l.name || l.id.slice(0, 8), w),
+      agentStyle(label.color) || S.title); cy++
     scr.hline(x, cy, w, S.border); cy += 2
 
     const field = (label, value, style = S.base) => {
@@ -317,12 +328,88 @@ export class DispatchScreen {
       if (ok) await app.launch(cfg)
       return true
     }
+    if (ev.name === 'R') {
+      await this.renameChat(app, l)
+      return true
+    }
+    if (ev.name === 'C') {
+      await this.recolourChat(app, l)
+      return true
+    }
     if (ev.name === 'o' && l.cwd) {
       openFolder(l.cwd)
       app.toast('opened ' + tildify(l.cwd))
       return true
     }
     return false
+  }
+
+  // Every session on this screen is running, so unlike Sessions this warning is
+  // the rule rather than the exception — Claude holds both values in memory and
+  // re-appends them on its next save.
+  async liveWriteOk(app, what) {
+    return confirm(app, {
+      title: 'Session is running',
+      message: `Claude re-writes the ${what} from memory when it next saves.`,
+      detail: 'This change may be overwritten — setting it inside the session always sticks.',
+      yes: 'Change anyway',
+    })
+  }
+
+  // Dispatch has a live record, not a session entry; the transcript is what
+  // carries the title and colour.
+  entryFor(app, l) {
+    const file = Sessions.transcriptFor(l)
+    if (!file) {
+      app.error('no transcript found for this session yet')
+      return null
+    }
+    return { id: l.id, file }
+  }
+
+  async renameChat(app, l) {
+    const entry = this.entryFor(app, l)
+    if (!entry) return
+    if (!(await this.liveWriteOk(app, 'title'))) return
+    const current = Sessions.readLabel(entry.file)
+    const name = await promptText(app, {
+      title: 'Rename chat',
+      label: 'Written to the transcript — Claude shows this title too',
+      value: current.title || l.name || '',
+      placeholder: l.id.slice(0, 8),
+      validate: (v) => (v ? null : 'a title is required'),
+    })
+    if (name === null) return
+    try {
+      Sessions.setSessionTitle(entry, name)
+      app.toast('renamed')
+    } catch (err) {
+      app.error(`rename failed: ${err.message}`)
+    }
+  }
+
+  async recolourChat(app, l) {
+    const entry = this.entryFor(app, l)
+    if (!entry) return
+    const current = Sessions.readLabel(entry.file)
+    const picked = await chooseFrom(app, {
+      title: 'Chat colour',
+      current: current.color ?? 'default',
+      items: [
+        { label: '○ default', value: 'default', hint: 'no accent', style: S.dim },
+        ...Sessions.AGENT_COLORS.map((c) => ({
+          label: `● ${c}`, value: c, style: agentStyle(c),
+        })),
+      ],
+    })
+    if (picked === null) return
+    if (!(await this.liveWriteOk(app, 'colour'))) return
+    try {
+      Sessions.setSessionColor(entry, picked)
+      app.toast(picked === 'default' ? 'colour cleared' : `colour set to ${picked}`)
+    } catch (err) {
+      app.error(`colour failed: ${err.message}`)
+    }
   }
 }
 
