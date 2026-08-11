@@ -104,6 +104,17 @@ every screen when a session is waiting on input.
 **2 Sessions** — every session ever run, grouped Live / Pinned / Recent, with
 detail on the right. `enter` resumes, `p` pins, `x` deletes, `/` filters.
 
+`R` renames a chat and `C` sets its accent colour. Both are Claude's own,
+not cl labels: they are written to the transcript as the same `custom-title`
+and `agent-color` records Claude writes itself, so the new name and colour show
+up inside Claude too, and the eight colours are the eight Claude accepts. `p`
+still pins, and `P` still renames a pin — that one is a cl-local label that
+Claude never sees.
+
+Renaming a *running* session asks first. Claude holds the title and colour in
+memory and re-appends both when it next saves, so a change made from outside
+would be silently undone; set those from inside the session instead.
+
 **3 Launch** — everything that becomes a CLI argument: model, effort, agent,
 name, directory, prompt, and the flag groups. The resulting command is rendered
 at the bottom on every keystroke, so there is no separate confirm step. `s`

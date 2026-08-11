@@ -57,6 +57,7 @@ const HELP = `
     1-6 / [ ] / tab       Dispatch · Sessions · Launch · Stats · Config · Data
     \`                     toggle the usage summary bar
     enter                 resume the highlighted session
+    R / C                 rename a chat / set its colour
     n                     new session
     j k h l gg G          vim navigation
     ?                     keys for the current screen

@@ -403,7 +403,9 @@ export async function promptText(app, { title, label = '', value = '', placehold
   })
 }
 
-// Overlay picker. `items` is [{ label, value, hint }]. Returns value or null.
+// Overlay picker. `items` is [{ label, value, hint, style }]. An item's
+// `style` wins over the default row styling — used by the colour picker, where
+// the swatch is the point. Returns value or null.
 export async function chooseFrom(app, { title, items, current = null, filterable = false }) {
   const { screen: scr, kb } = app
   let filter = ''
@@ -444,7 +446,7 @@ export async function chooseFrom(app, { title, items, current = null, filterable
     }
 
     list.draw(scr, x + 1, ly, w - 2, listH, (item, { selected }) => [
-      { text: ' ' + (item.value === current ? '▸' : ' ') + ' ' + item.label, style: item.value === current ? S.accent : S.base },
+      { text: ' ' + (item.value === current ? '▸' : ' ') + ' ' + item.label, style: item.style || (item.value === current ? S.accent : S.base) },
       { text: item.hint ? '  ' + item.hint : '', style: S.dim },
     ])
     scr.flush()

@@ -155,6 +155,32 @@ export function gaugeStyle(frac) {
   return S.ok
 }
 
+// Session accent colours.
+//
+// Claude renders an agent-color name through its own theme, and this is that
+// theme's mapping — so a session tinted here is the colour Claude shows for
+// it, not an approximation. purple, orange and pink have no basic-ANSI
+// equivalent, hence the 256-colour indices.
+//
+// These are deliberately raw ANSI rather than tokens from the palette above:
+// the point is to agree with Claude, not with cl.
+const AGENT_SGR = {
+  red: '31', green: '32', yellow: '33', blue: '34', purple: '35', cyan: '36',
+  orange: '38;5;208', pink: '38;5;205',
+}
+
+// Nearest basics for terminals without a 256-colour palette.
+const AGENT_SGR_16 = { orange: '33', pink: '35' }
+
+// null when the session has no colour, so callers can fall back with `||`.
+export function agentStyle(name) {
+  if (!hasColor || !name || name === 'default') return null
+  const sgr = AGENT_SGR[name]
+  if (!sgr) return null
+  if (depth < 8 && AGENT_SGR_16[name]) return AGENT_SGR_16[name]
+  return sgr
+}
+
 export function statusLabel(status) {
   return status === 'waiting' ? 'needs you' : (status || 'unknown')
 }

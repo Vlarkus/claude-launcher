@@ -17,6 +17,13 @@ import { P, exists, decodeProject, encodeProject } from './paths.mjs'
 const HEAD_BYTES = 16 * 1024
 const TAIL_BYTES = 128 * 1024
 
+// The accent colours Claude accepts in an agent-color record. Anything else is
+// ignored by Claude, so cl refuses to write it rather than leaving a record
+// that silently does nothing. "default" is the sentinel for no colour.
+export const AGENT_COLORS = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'cyan']
+
+const TITLE_MAX = 200
+
 function parseLines(text, onObject) {
   for (const line of text.split('\n')) {
     const t = line.trim()
@@ -59,6 +66,20 @@ function cleanPrompt(s) {
   return stripped
 }
 
+// Records Claude re-appends over the life of a session — the last one seen
+// wins. Applied to the head as well as the tail because a transcript smaller
+// than HEAD_BYTES never reaches the tail branch at all; without this, a short
+// session's colour and last prompt were read as absent.
+function applyLate(meta, o) {
+  if (o.type === 'custom-title' && o.customTitle) meta.title = o.customTitle
+  if (o.type === 'agent-name' && o.agentName) meta.agentName = o.agentName
+  // Claude treats "default" as "no colour", not as a colour named default.
+  if (o.type === 'agent-color' && o.agentColor) {
+    meta.color = o.agentColor === 'default' ? null : o.agentColor
+  }
+  if (o.type === 'last-prompt' && o.lastPrompt) meta.lastPrompt = cleanPrompt(o.lastPrompt)
+}
+
 export function readSessionMeta(file) {
   let st
   try { st = fs.statSync(file) } catch { return null }
@@ -95,8 +116,7 @@ export function readSessionMeta(file) {
         const t = cleanPrompt(textOf(o.message))
         if (t) meta.firstPrompt = t
       }
-      if (o.type === 'custom-title' && o.customTitle) meta.title = o.customTitle
-      if (o.type === 'agent-name' && o.agentName) meta.agentName = o.agentName
+      applyLate(meta, o)
     })
 
     if (size > headLen) {
@@ -108,10 +128,7 @@ export function readSessionMeta(file) {
       const nl = text.indexOf('\n')
       if (nl !== -1 && size > tailLen) text = text.slice(nl + 1)
       parseLines(text, (o) => {
-        if (o.type === 'custom-title' && o.customTitle) meta.title = o.customTitle
-        if (o.type === 'agent-name' && o.agentName) meta.agentName = o.agentName
-        if (o.type === 'agent-color' && o.agentColor) meta.color = o.agentColor
-        if (o.type === 'last-prompt' && o.lastPrompt) meta.lastPrompt = cleanPrompt(o.lastPrompt)
+        applyLate(meta, o)
         if (!meta.cwd && o.cwd) meta.cwd = o.cwd
       })
     }
@@ -475,6 +492,60 @@ export function transcriptFor(live) {
 // Stable signature of the live set — used to decide whether a redraw is needed.
 export function liveSignature(list) {
   return list.map((l) => `${l.id}:${l.status}:${l.updatedAt}`).sort().join('|')
+}
+
+// Writing a session's title and colour.
+//
+// Claude stores both as ordinary JSONL records appended to the transcript —
+// its own saveCustomTitle and saveAgentColor do exactly this, and re-append
+// the same records on every session save. Appending is therefore the native
+// operation, not a trick: nothing already written is touched, and a reader
+// (Claude's or ours) takes the last record it sees.
+//
+// The one hazard is a transcript whose final line has no trailing newline,
+// which an append would fuse with the new record into one unparseable line.
+function appendRecord(file, record) {
+  if (!exists(file)) throw new Error('transcript no longer exists')
+  const st = fs.statSync(file)
+  let needsNewline = false
+  if (st.size > 0) {
+    const fd = fs.openSync(file, 'r')
+    try {
+      const last = Buffer.alloc(1)
+      fs.readSync(fd, last, 0, 1, st.size - 1)
+      needsNewline = last[0] !== 0x0a
+    } finally {
+      fs.closeSync(fd)
+    }
+  }
+  fs.appendFileSync(file, (needsNewline ? '\n' : '') + JSON.stringify(record) + '\n')
+}
+
+// The session id is taken from the filename rather than the caller, so a
+// record can never be written claiming to be about a different session.
+function sessionIdOf(entry) {
+  const id = path.basename(entry.file, '.jsonl')
+  if (!id) throw new Error('cannot determine the session id')
+  return id
+}
+
+export function setSessionTitle(entry, title) {
+  const t = String(title ?? '').trim().replace(/\s+/g, ' ').slice(0, TITLE_MAX)
+  if (!t) throw new Error('a title is required')
+  appendRecord(entry.file, {
+    type: 'custom-title', customTitle: t, sessionId: sessionIdOf(entry),
+  })
+  return t
+}
+
+// `color` is one of AGENT_COLORS, or "default" to clear it.
+export function setSessionColor(entry, color) {
+  const c = String(color ?? '').trim()
+  if (c !== 'default' && !AGENT_COLORS.includes(c)) throw new Error(`not a Claude colour: ${c}`)
+  appendRecord(entry.file, {
+    type: 'agent-color', agentColor: c, sessionId: sessionIdOf(entry),
+  })
+  return c === 'default' ? null : c
 }
 
 export function deleteSession(entry) {

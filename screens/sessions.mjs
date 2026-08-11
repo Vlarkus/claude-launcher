@@ -5,8 +5,8 @@
 // from shell to conversation.
 
 import path from 'node:path'
-import { S, statusStyle, statusStyleAt, statusGlyph } from '../tui/theme.mjs'
-import { List, confirm, promptText, listMouse } from '../tui/widgets.mjs'
+import { S, statusStyle, statusStyleAt, statusGlyph, agentStyle } from '../tui/theme.mjs'
+import { List, confirm, promptText, chooseFrom, listMouse } from '../tui/widgets.mjs'
 import { truncate, fit, wrap, stringWidth } from '../tui/width.mjs'
 import * as Sessions from '../data/sessions.mjs'
 import * as State from '../data/state.mjs'
@@ -20,15 +20,17 @@ export class SessionsScreen {
   id = 'sessions'
   title = 'Sessions'
   keys = [
-    ['enter', 'resume'], ['n', 'new'], ['p', 'pin'], ['x', 'delete'],
-    ['/', 'search'], ['r', 'refresh'], ['?', 'help'],
+    ['enter', 'resume'], ['n', 'new'], ['R', 'rename'], ['C', 'colour'],
+    ['p', 'pin'], ['x', 'delete'], ['/', 'search'], ['?', 'help'],
   ]
   help = [
     'enter        resume the highlighted session',
     'n            new session (opens Launch)',
     'c            continue most recent in this directory',
+    'R            rename the chat — Claude sees this too',
+    'C            set the chat\'s accent colour',
     'p            pin / unpin',
-    'P            rename a pin',
+    'P            rename the pin only (a cl-local label)',
     'x            delete the transcript',
     'o            open the project folder',
     '/            filter by title or project',
@@ -197,9 +199,14 @@ export class SessionsScreen {
       if (item.live) { mark = ' ' + statusGlyph(item.live.status); markStyle = statusStyleAt(item.live.status) }
       else if (item.pinned) { mark = ' ★'; markStyle = S.warn }
 
+      // The accent colour rides on the title, not on the mark column — that
+      // column belongs to live status, and a user-chosen red must never be
+      // mistakable for "needs you".
+      const titleStyle = agentStyle(s.color) || (item.live ? S.title : S.base)
+
       return [
         { text: mark + ' ', style: markStyle },
-        { text: fit(title, titleW), style: item.live ? S.title : S.base },
+        { text: fit(title, titleW), style: titleStyle },
         { text: fit(proj, projW), style: S.muted },
         { text: fit(age, ageW, 'right'), style: S.dim },
       ]
@@ -220,7 +227,7 @@ export class SessionsScreen {
     let cy = y
 
     const title = Sessions.displayTitle(s)
-    scr.put(x + 2, cy, truncate(title, inner), S.title); cy++
+    scr.put(x + 2, cy, truncate(title, inner), agentStyle(s.color) || S.title); cy++
     scr.hline(x + 2, cy, inner, S.border); cy += 2
 
     const field = (label, value, style = S.base) => {
@@ -250,6 +257,11 @@ export class SessionsScreen {
     if (item.pinned) {
       const pin = State.loadState().pins.find((p) => p.sessionId === s.id)
       field('pinned', pin?.label ? `★ ${pin.label}` : '★ yes', S.warn)
+    }
+    if (s.color) {
+      scr.put(x + 2, cy, fit('colour', 9), S.muted)
+      scr.put(x + 11, cy, '● ' + s.color, agentStyle(s.color) || S.base)
+      cy++
     }
     field('id', s.id, S.dim)
 
@@ -331,6 +343,14 @@ export class SessionsScreen {
       app.toast(nowPinned ? 'pinned' : 'unpinned')
       return true
     }
+    if (ev.name === 'R' && item) {
+      await this.renameChat(app, item)
+      return true
+    }
+    if (ev.name === 'C' && item) {
+      await this.recolourChat(app, item)
+      return true
+    }
     if (ev.name === 'P' && item) {
       const label = await promptText(app, {
         title: 'Rename pin',
@@ -363,6 +383,72 @@ export class SessionsScreen {
       return true
     }
     return false
+  }
+
+  // A running Claude keeps the title and colour in memory and re-appends both
+  // on its next save, which would quietly undo anything written here. Better
+  // to say so and let the choice be made than to fail invisibly.
+  async liveWriteOk(app, item, what) {
+    if (!item.live) return true
+    return confirm(app, {
+      title: 'Session is running',
+      message: `Claude re-writes the ${what} from memory when it next saves.`,
+      detail: `This change would be overwritten — set it inside the session instead.`,
+      yes: 'Change anyway',
+    })
+  }
+
+  // Re-read the transcript so the row shows what was actually written, rather
+  // than what we hoped was written.
+  refreshRow(item) {
+    const fresh = Sessions.hydrate({ ...item.session, hydrated: false })
+    const i = this.all.findIndex((s) => s.id === fresh.id)
+    if (i >= 0) this.all[i] = fresh
+    item.session = fresh
+    this.rebuild()
+  }
+
+  async renameChat(app, item) {
+    const s = item.session
+    if (!(await this.liveWriteOk(app, item, 'title'))) return
+    const name = await promptText(app, {
+      title: 'Rename chat',
+      label: 'Written to the transcript — Claude shows this title too',
+      value: s.title || s.agentName || '',
+      placeholder: Sessions.displayTitle(s),
+      validate: (v) => (v ? null : 'a title is required'),
+    })
+    if (name === null) return
+    try {
+      Sessions.setSessionTitle(s, name)
+      this.refreshRow(item)
+      app.toast('renamed')
+    } catch (err) {
+      app.error(`rename failed: ${err.message}`)
+    }
+  }
+
+  async recolourChat(app, item) {
+    const s = item.session
+    const picked = await chooseFrom(app, {
+      title: 'Chat colour',
+      current: s.color ?? 'default',
+      items: [
+        { label: '○ default', value: 'default', hint: 'no accent', style: S.dim },
+        ...Sessions.AGENT_COLORS.map((c) => ({
+          label: `● ${c}`, value: c, style: agentStyle(c),
+        })),
+      ],
+    })
+    if (picked === null) return
+    if (!(await this.liveWriteOk(app, item, 'colour'))) return
+    try {
+      Sessions.setSessionColor(s, picked)
+      this.refreshRow(item)
+      app.toast(picked === 'default' ? 'colour cleared' : `colour set to ${picked}`)
+    } catch (err) {
+      app.error(`colour failed: ${err.message}`)
+    }
   }
 
   async resume(app, item) {
