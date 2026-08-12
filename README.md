@@ -63,7 +63,7 @@ turned on when output is piped.
 
 ## Screens
 
-Six, reached with `1`–`6`, `[`/`]`, or Tab. Each fills the terminal. cl opens
+Seven, reached with `1`–`7`, `[`/`]`, or Tab. Each fills the terminal. cl opens
 on Dispatch when something is running, otherwise on Sessions.
 
 **1 Dispatch** — what is running right now, and what it is doing. One row per
@@ -175,6 +175,22 @@ Two deliberate omissions:
 hooks, permissions, plugins, MCP, statusline, keybindings, environment, memory.
 `R` opens a raw JSON tree for anything the forms do not cover, `U` switches
 between the user and local settings files, `B` restores a backup.
+
+**7 Accounts** — the subscriptions cl can launch under. An account is a label
+and a directory: Claude Code keeps the whole identity (token, settings,
+history, MCP) under `CLAUDE_CONFIG_DIR`, so a second directory is a second
+subscription, and both can run at once. `a` adds, `e` renames, `d` changes the
+directory, `x` removes, `enter` opens Launch with that account selected.
+
+The active account shows in the header on every screen — Max in red, Pro in
+amber, deliberately not the status colours, since an account is a setting you
+chose rather than a state needing attention. Launch has an `account` row that
+sets `CLAUDE_CONFIG_DIR` on the spawned session.
+
+**cl never stores a token.** It keeps a label and a path; the credential stays
+in `<dir>/.credentials.json`, which belongs to Claude Code. The one field read
+for display is `subscriptionType`. Removing an account removes cl’s pointer
+and leaves the directory alone, so you are not logged out of anything.
 
 **6 Data** — project directories with sizes and session counts, the cache
 directories, and the projects whose working directory no longer exists.

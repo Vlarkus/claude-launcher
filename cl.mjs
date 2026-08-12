@@ -25,6 +25,7 @@ import { LaunchScreen } from './screens/launch.mjs'
 import { StatsScreen } from './screens/stats.mjs'
 import { ConfigScreen } from './screens/config.mjs'
 import { DataScreen } from './screens/data.mjs'
+import { AccountsScreen } from './screens/accounts.mjs'
 import { emptyConfig, runClaude } from './launch.mjs'
 import { pruneStaleLiveFiles } from './data/sessions.mjs'
 
@@ -54,7 +55,7 @@ const HELP = `
     cl -v, --version      version
 
   in the launcher
-    1-6 / [ ] / tab       Dispatch · Sessions · Launch · Stats · Config · Data
+    1-7 / [ ] / tab       Dispatch · Sessions · Launch · Stats · Config · Data · Accounts
     \`                     toggle the usage summary bar
     enter                 resume the highlighted session
     R / C                 rename a chat / set its colour
@@ -131,6 +132,7 @@ async function main() {
     new StatsScreen(),
     new ConfigScreen(),
     new DataScreen(),
+    new AccountsScreen(),
   ])
 
   // Land on Dispatch when something is running, otherwise on Sessions —
