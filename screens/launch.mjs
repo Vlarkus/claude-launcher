@@ -17,6 +17,20 @@ import { MODELS, EFFORTS, FLAGS, emptyConfig, displayCommand } from '../launch.m
 import * as State from '../data/state.mjs'
 import * as Settings from '../data/settings.mjs'
 import { tildify, exists, HOME } from '../data/paths.mjs'
+import { listAccounts, subscriptionTier } from '../data/accounts.mjs'
+
+// Built fresh each render so a newly logged-in account appears without a
+// restart. "this one" is whatever cl itself is running under.
+const ACCOUNT_OPTIONS = () => [
+  { value: null, label: 'this one', desc: 'Run under the same subscription cl is using.' },
+  ...listAccounts().map((a) => ({
+    value: a.id,
+    label: a.label,
+    desc: a.exists
+      ? `${a.dir}${subscriptionTier(a) ? ` · ${subscriptionTier(a)}` : ''}`
+      : `${a.dir} — not logged in yet: run claude there once and /login`,
+  })),
+]
 
 const FLAG_GROUPS = [
   { key: 'session', label: 'session' },
@@ -71,6 +85,8 @@ export class LaunchScreen {
     const cfg = this.cfg
     const pluginCount = Settings.pluginRows(this.settings?.data || {}).filter((p) => p.enabled).length
     const out = [
+      { type: 'enum', key: 'account', label: 'account', options: ACCOUNT_OPTIONS(), value: cfg.account,
+        desc: 'Which subscription this session runs under. Sets CLAUDE_CONFIG_DIR on the spawned process, so the two bill separately.' },
       { type: 'enum', key: 'model', label: 'model', options: MODELS, value: cfg.model },
       { type: 'enum', key: 'effort', label: 'effort', options: EFFORTS, value: cfg.effort },
       { type: 'text', key: 'dir', label: 'dir', value: tildify(cfg.dir), desc: 'Working directory the session starts in.' },

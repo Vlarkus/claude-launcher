@@ -3,7 +3,7 @@
 // Modals run their own key loop and draw over the frame beneath them, so they
 // take a `redraw` callback that repaints the background before each frame.
 
-import { S } from './theme.mjs'
+import { S, accountStyle } from './theme.mjs'
 import { BORDER } from './screen.mjs'
 import { stringWidth, truncate, fit, asText } from './width.mjs'
 import { isPrintable } from './keys.mjs'
@@ -155,12 +155,19 @@ export function scrollbar(scr, x, y, h, total, offset) {
 // ── Chrome ───────────────────────────────────────────────────────────
 
 // Returns the clickable region of each tab so the app can route mouse presses.
-export function drawHeader(scr, { tabs = [], active = 0, right = '', alert = '' } = {}) {
+export function drawHeader(scr, { tabs = [], active = 0, right = '', alert = '', account = null } = {}) {
   const w = scr.cols
   scr.fill(0, 0, w, 1, ' ', S.base)
   let x = 1
   x = scr.put(x, 0, 'cl', S.title)
   x = scr.put(x, 0, '  ', S.base)
+
+  // Which subscription this cl is looking at. Far left, on every screen, so
+  // the answer to "which account am I in" never depends on the panel.
+  if (account?.label) {
+    x = scr.put(x, 0, account.label, accountStyle(account.id))
+    x = scr.put(x, 0, '  ', S.base)
+  }
 
   const rects = []
   tabs.forEach((t, i) => {

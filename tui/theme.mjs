@@ -181,6 +181,23 @@ export function agentStyle(name) {
   return sgr
 }
 
+// Subscription accounts. Two hues far enough apart to tell apart at a glance
+// in a header, and deliberately not the status colours: an account is a
+// setting you chose, never a state that needs attention.
+const ACCOUNT_P = {
+  max: [233, 90, 100],    // red
+  pro: [235, 155, 60],    // amber
+  other: [140, 140, 160], // anything unrecognised
+}
+
+export function accountStyle(id) {
+  if (!hasColor) return ''
+  const c = ACCOUNT_P[id] || ACCOUNT_P.other
+  if (depth >= 24) return `38;2;${c[0]};${c[1]};${c[2]};1`
+  if (depth >= 8) return `38;5;${id === 'max' ? 203 : id === 'pro' ? 214 : 245};1`
+  return `${id === 'max' ? 91 : id === 'pro' ? 93 : 90};1`
+}
+
 export function statusLabel(status) {
   return status === 'waiting' ? 'needs you' : (status || 'unknown')
 }

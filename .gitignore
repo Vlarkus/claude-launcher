@@ -16,3 +16,8 @@ package-lock.json
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Account pointers, if ever written beside the code rather than in the state dir.
+accounts.json
+.credentials.json
+.claude.json

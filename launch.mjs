@@ -54,6 +54,7 @@ export function emptyConfig() {
   const cfg = {
     model: null,
     effort: null,
+    account: null,   // account id; null = whatever cl itself is running under
     agent: null,
     name: null,
     dir: process.cwd(),
@@ -151,6 +152,13 @@ export function resolveCommand(name, args) {
     return { cmd: 'powershell', args: ['-NoProfile', '-File', file, ...args], shell: false, found: true }
   }
   return { cmd: file, args, shell: false, found: true }
+}
+
+// The child runs under the chosen subscription by way of CLAUDE_CONFIG_DIR;
+// with no account chosen it simply inherits cl's own environment.
+function envForConfig(cfg) {
+  const acct = cfg?.account ? accountById(cfg.account) : null
+  return acct ? envFor(acct) : process.env
 }
 
 // Run claude to completion, returning its exit code. `before` and `after` let

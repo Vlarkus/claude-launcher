@@ -19,6 +19,7 @@ import { runClaude, displayCommand } from './launch.mjs'
 import { saveState, loadState } from './data/state.mjs'
 import { listLive, liveSignature } from './data/sessions.mjs'
 import { P, tildify } from './data/paths.mjs'
+import { activeAccount } from './data/accounts.mjs'
 
 export class App {
   constructor(screens) {
@@ -27,6 +28,9 @@ export class App {
     this.screens = screens
     this.index = 0
     this.running = true
+    // Which subscription cl itself is reading. Fixed for the lifetime of the
+    // process, because it comes from the environment cl was started with.
+    this.account = activeAccount()
     this.message = null
     this.messageStyle = S.muted
     this.messageUntil = 0
@@ -176,6 +180,7 @@ export class App {
       alert: waiting.length
         ? `! ${waiting.length} need${waiting.length === 1 ? 's' : ''} you`
         : '',
+      account: this.account,
     })
     const statsH = this.statsBar ? 2 : 0
     const body = { x: 0, y: 2, w: scr.cols, h: scr.rows - 3 - statsH }
