@@ -291,7 +291,7 @@ function panel(scr, w, h) {
 
 // Track overlay nesting so background work (the toast expiry timer) knows not
 // to repaint over an open modal.
-async function overlay(app, fn) {
+export async function overlay(app, fn) {
   app.overlays = (app.overlays ?? 0) + 1
   try {
     return await fn()

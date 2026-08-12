@@ -124,6 +124,46 @@ name, directory, prompt, and the flag groups. The resulting command is rendered
 at the bottom on every keystroke, so there is no separate confirm step. `s`
 saves the configuration as a profile.
 
+### Choosing a directory
+
+The `dir` field opens a picker with two modes in one overlay, because choosing
+a directory is really two jobs.
+
+**List** — where it opens. The directories cl already knows you work in, newest
+first, with their branch, session count and age. No filesystem walk happens at
+all. Typing filters; typing something that starts with `~`, `/` or a drive
+letter turns the filter into path entry that completes as you go, so knowing
+the path means never navigating.
+
+```
+│ > rdc                                                          2 / 13 known │
+│ ▸ raptor-c2       ~/Documents/GitHub/RDC              main   9h   2          │
+│   new-website     ~/Documents/GitHub/RDC              main   7d   6          │
+```
+
+**Browse** — `tab`, or `→` to step straight into the highlighted row. Miller
+columns, as in ranger and yazi: parent, here, and a preview of whatever is
+highlighted. `h`/`l` move out and in, `a` creates a directory in the column you
+are standing in, and `~` jumps home. On Windows, going up from `C:/` lists the
+drives rather than dead-ending.
+
+```
+│ Documents         │ GitHub               │ ● git main                       │
+│  ▸ GitHub         │   claude-launcher    │                                  │
+│    Projects       │   ClaudeWorkView     │   data/     screens/             │
+│    Vaults         │   … 14 more          │   tui/                           │
+```
+
+Creation lives in browse rather than in the list on purpose: making a directory
+is inherently spatial — you have to *be* somewhere to make a new one there, and
+a flat list has no "here".
+
+Directories are read lazily and cached on mtime, and git branches come from
+reading `.git/HEAD` rather than spawning git, so nothing here blocks a redraw.
+Projects with no sessions are skipped when their path can't be recovered — the
+project-folder encoding replaces every separator with `-`, so those guesses are
+usually wrong and would list rows that cannot be chosen.
+
 **4 Stats** — one scrollable page of everything the transcripts can tell you:
 totals, a rolling 5-hour window, today, a 12-hour sparkline, turns per day,
 which hours you work, and breakdowns by project, tool, model, skill and plugin.

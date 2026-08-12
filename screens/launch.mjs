@@ -311,16 +311,12 @@ export class LaunchScreen {
 
   async editText(app, row) {
     if (row.key === 'dir') {
-      const value = await promptText(app, {
+      const { pickDirectory } = await import('../tui/dirpicker.mjs')
+      const value = await pickDirectory(app, {
         title: 'Working directory',
-        label: 'Absolute path, or ~ for home',
-        value: tildify(this.cfg.dir),
-        validate: (v) => {
-          const p = v.replace(/^~(?=$|[/\\])/, HOME)
-          return exists(p) ? null : 'no such directory'
-        },
+        value: this.cfg.dir,
       })
-      if (value !== null) this.cfg.dir = value.replace(/^~(?=$|[/\\])/, HOME)
+      if (value !== null) this.cfg.dir = value
       return
     }
     if (row.key === 'addDirs') {
