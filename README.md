@@ -179,8 +179,14 @@ between the user and local settings files, `B` restores a backup.
 **7 Accounts** — the subscriptions cl can launch under. An account is a label
 and a directory: Claude Code keeps the whole identity (token, settings,
 history, MCP) under `CLAUDE_CONFIG_DIR`, so a second directory is a second
-subscription, and both can run at once. `a` adds, `e` renames, `d` changes the
-directory, `x` removes, `enter` opens Launch with that account selected.
+subscription, and both can run at once. `L` signs in, `O` signs out, `a` adds, `e` renames, `d` changes the directory,
+`x` removes, `enter` opens Launch with that account selected.
+
+Signing in hands the terminal to `claude auth login` with that account’s
+`CLAUDE_CONFIG_DIR` set, so the browser flow writes the token into that
+directory and nowhere else; cl comes back when it finishes and re-reads the
+login state from disk rather than trusting the exit code, since an abandoned
+browser flow still exits 0.
 
 The active account shows in the header on every screen — Max in red, Pro in
 amber, deliberately not the status colours, since an account is a setting you

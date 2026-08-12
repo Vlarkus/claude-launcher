@@ -22,16 +22,22 @@ export class AccountsScreen {
   id = 'accounts'
   title = 'Accounts'
   keys = [
-    ['a', 'add'], ['e', 'rename'], ['d', 'directory'], ['x', 'remove'],
-    ['enter', 'launch with'], ['?', 'help'],
+    ['L', 'sign in'], ['a', 'add'], ['e', 'rename'], ['d', 'directory'],
+    ['x', 'remove'], ['enter', 'launch with'], ['?', 'help'],
   ]
   help = [
+    'L            sign in to this account',
+    'O            sign out of it',
     'a            add an account',
     'e            rename it',
     'd            change its directory',
     'x            remove it from cl',
     'enter        open Launch with this account selected',
     'r            re-read login state from disk',
+    '',
+    'Signing in hands the terminal to `claude auth login` with this account\'s',
+    'CLAUDE_CONFIG_DIR set, so the browser flow writes the token into that',
+    'directory and nowhere else. cl comes back when it finishes.',
     '',
     'An account is a label and a directory. Claude Code stores the whole',
     'identity — token, settings, history, MCP — under CLAUDE_CONFIG_DIR, so a',
@@ -40,9 +46,6 @@ export class AccountsScreen {
     'cl never stores a token. Removing an account removes cl\'s pointer only;',
     'the directory and the credential inside it are left alone, so you are not',
     'logged out of anything.',
-    '',
-    'Not logged in yet? Run `claude` once with CLAUDE_CONFIG_DIR set to that',
-    'directory and use /login.',
   ]
 
   constructor() {
@@ -134,7 +137,7 @@ export class AccountsScreen {
 
     field('directory', tildify(a.dir), exists(a.dir) ? S.base : S.err)
     if (!exists(a.dir)) field('', 'this directory does not exist', S.err)
-    field('login', a.exists ? 'signed in' : 'not signed in', a.exists ? S.ok : S.warn)
+    field("login", a.exists ? "signed in" : "not signed in — press L", a.exists ? S.ok : S.warn)
     field('plan', a.exists ? (Accounts.subscriptionTier(a) || 'unknown') : null)
     const n = this.sessionCount(a)
     field('sessions', n === null ? null : String(n))
@@ -143,7 +146,7 @@ export class AccountsScreen {
     cy++
     if (!a.exists) {
       scr.put(x, cy, 'to sign in', S.heading); cy++
-      for (const line of wrap(`Run claude once with CLAUDE_CONFIG_DIR set to ${tildify(a.dir)}, then /login. On Windows: cpro`, w)) {
+      for (const line of wrap(`Press L to sign in — cl hands the terminal to claude auth login with this account's directory set.`, w)) {
         scr.put(x, cy, line, S.muted); cy++
       }
       cy++
@@ -176,6 +179,22 @@ export class AccountsScreen {
         app.switchTo('launch')
         app.toast(`launching under ${a.label}`)
       }
+      return true
+    }
+    if (ev.name === 'L') {
+      await this.auth(app, a, ['auth', 'login'], `signing in to ${a.label}`)
+      return true
+    }
+    if (ev.name === 'O') {
+      if (!a.exists) { app.error(`${a.label} is not signed in`); return true }
+      const ok = await confirm(app, {
+        title: 'Sign out',
+        message: `Sign out of "${a.label}"?`,
+        detail: 'This clears the credential in that directory. Sessions and settings stay.',
+        danger: true,
+        yes: 'Sign out',
+      })
+      if (ok) await this.auth(app, a, ['auth', 'logout'], `signing out of ${a.label}`)
       return true
     }
     if (ev.name === 'e') {
@@ -231,6 +250,41 @@ export class AccountsScreen {
     for (let i = 2; this.accounts.some((a) => a.id === id); i++) id = `${base}-${i}`
 
     this.write([...this.accounts, { id, label, dir }], app, `added ${label}`)
+  }
+
+  // Hand the terminal to `claude auth …` with this account's config dir set.
+  //
+  // The OAuth flow is interactive — it opens a browser and waits — so it needs
+  // the real terminal, not a pane inside cl. app.launch already does that
+  // dance for resuming a session: tear down the TUI, run, come back.
+  //
+  // The directory has to exist before claude will write a credential into it,
+  // and an account whose directory is missing is the common case right after
+  // adding one, so create it here rather than failing with an obscure error.
+  async auth(app, account, args, message) {
+    if (!exists(account.dir)) {
+      try {
+        fs.mkdirSync(account.dir, { recursive: true })
+      } catch (err) {
+        app.error(`could not create ${tildify(account.dir)}: ${err.message}`)
+        return
+      }
+    }
+    app.toast(message)
+    await app.launch({
+      ...emptyConfig(),
+      dir: account.dir,
+      account: account.id,
+      rawArgs: args,
+    })
+    // Login state changed on disk; re-read rather than trusting the exit code,
+    // since the user can abandon the browser flow and claude still exits 0.
+    this.reload(app)
+    const now = Accounts.listAccounts().find((x) => x.id === account.id)
+    if (args[1] === 'login') {
+      app.toast(now?.exists ? `${account.label} signed in` : `${account.label} still not signed in`,
+        now?.exists ? undefined : S.warn)
+    }
   }
 
   write(next, app, message) {
