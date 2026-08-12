@@ -126,26 +126,11 @@ saves the configuration as a profile.
 
 ### Choosing a directory
 
-The `dir` field opens a picker with two modes in one overlay, because choosing
-a directory is really two jobs.
+The `dir` field opens a Miller-column browser — parent, here, and a preview of
+whatever is highlighted — as in ranger, yazi and lf.
 
-**List** — where it opens. The directories cl already knows you work in, newest
-first, with their branch, session count and age. No filesystem walk happens at
-all. Typing filters; typing something that starts with `~`, `/` or a drive
-letter turns the filter into path entry that completes as you go, so knowing
-the path means never navigating.
-
-```
-│ > rdc                                                          2 / 13 known │
-│ ▸ raptor-c2       ~/Documents/GitHub/RDC              main   9h   2          │
-│   new-website     ~/Documents/GitHub/RDC              main   7d   6          │
-```
-
-**Browse** — `tab`, or `→` to step straight into the highlighted row. Miller
-columns, as in ranger and yazi: parent, here, and a preview of whatever is
-highlighted. `h`/`l` move out and in, `a` creates a directory in the column you
-are standing in, and `~` jumps home. On Windows, going up from `C:/` lists the
-drives rather than dead-ending.
+It always opens on the directory cl was started in, with that directory
+highlighted inside its parent, so `enter` picks where you already are.
 
 ```
 │ Documents         │ GitHub               │ ● git main                       │
@@ -154,15 +139,18 @@ drives rather than dead-ending.
 │    Vaults         │   … 14 more          │   tui/                           │
 ```
 
-Creation lives in browse rather than in the list on purpose: making a directory
-is inherently spatial — you have to *be* somewhere to make a new one there, and
-a flat list has no "here".
+`h`/`l` move out and in, `j`/`k` move, `/` filters the current column, `.`
+toggles hidden directories and `~` jumps home. On Windows, going up from
+`C:/` lists the drives rather than dead-ending.
+
+`a` creates a directory in the column you are standing in, which is why
+creation lives here: making a directory is spatial — you have to *be*
+somewhere to make a new one there. An empty column chooses the directory you
+are standing in, so a brand-new project can be created and picked without
+leaving the overlay.
 
 Directories are read lazily and cached on mtime, and git branches come from
-reading `.git/HEAD` rather than spawning git, so nothing here blocks a redraw.
-Projects with no sessions are skipped when their path can't be recovered — the
-project-folder encoding replaces every separator with `-`, so those guesses are
-usually wrong and would list rows that cannot be chosen.
+reading `.git/HEAD` rather than spawning git, so nothing blocks a redraw.
 
 **4 Stats** — one scrollable page of everything the transcripts can tell you:
 totals, a rolling 5-hour window, today, a 12-hour sparkline, turns per day,

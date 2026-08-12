@@ -312,10 +312,9 @@ export class LaunchScreen {
   async editText(app, row) {
     if (row.key === 'dir') {
       const { pickDirectory } = await import('../tui/dirpicker.mjs')
-      const value = await pickDirectory(app, {
-        title: 'Working directory',
-        value: this.cfg.dir,
-      })
+      // No `value`: the picker opens where cl was started, every time, rather
+      // than wherever the field happens to point.
+      const value = await pickDirectory(app, { title: 'Working directory' })
       if (value !== null) this.cfg.dir = value
       return
     }

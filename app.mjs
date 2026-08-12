@@ -378,7 +378,17 @@ export class App {
     try {
       while (this.running) {
         const ev = await this.kb.next()
-        await this.handleKey(ev)
+        // One screen action throwing must not end the session. Before this,
+        // any exception unwound out of the loop, through the finally below,
+        // and cl simply exited — which reads as "that feature quits the
+        // program" rather than as the bug it is. Now it surfaces where it can
+        // be reported.
+        try {
+          await this.handleKey(ev)
+        } catch (err) {
+          this.error(`${this.current?.id ?? 'cl'}: ${err?.message ?? err}`)
+          if (process.env.CL_DEBUG) process.stderr.write(`\n${err?.stack ?? err}\n`)
+        }
         if (this.running) this.render()
       }
     } finally {
