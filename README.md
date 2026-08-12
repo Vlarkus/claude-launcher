@@ -31,7 +31,7 @@ screen.
 ```
 j k              down / up                 gg G     top / bottom
 h l              left / right              ctrl-d/u page down / up
-[ ] 1-6 tab      switch screen             ctrl-f/b page down / up
+[ ] 1-7 tab      switch screen             ctrl-f/b page down / up
 /                search                    d        delete (same as x)
 enter            act on the selection      esc      back
 q                quit                      ?        keys for this screen
