@@ -26,7 +26,7 @@ export class AccountsScreen {
     ['c', 'colour'], ['x', 'remove'], ['enter', 'launch with'], ['?', 'help'],
   ]
   help = [
-    'L            sign in to this account',
+    'L            sign in — asks how, rather than firing the browser flow',
     'O            sign out of it',
     'a            add an account',
     'e            rename it',
@@ -36,9 +36,9 @@ export class AccountsScreen {
     'enter        open Launch with this account selected',
     'r            re-read login state from disk',
     '',
-    'Signing in hands the terminal to `claude auth login` with this account\'s',
-    'CLAUDE_CONFIG_DIR set, so the browser flow writes the token into that',
-    'directory and nowhere else. cl comes back when it finishes.',
+    'Sign-in offers: name the address (recommended), let the browser choose,',
+    'Console (API billing), or SSO. Naming the address stops the page picking',
+    'the account your browser is already signed into — the usual silent failure.',
     '',
     'An account is a label and a directory. Claude Code stores the whole',
     'identity — token, settings, history, MCP — under CLAUDE_CONFIG_DIR, so a',
@@ -191,7 +191,7 @@ export class AccountsScreen {
       return true
     }
     if (ev.name === 'L') {
-      await this.auth(app, a, ['auth', 'login'], `signing in to ${a.label}`)
+      await this.signIn(app, a)
       return true
     }
     if (ev.name === 'O') {
@@ -272,6 +272,45 @@ export class AccountsScreen {
     this.write([...this.accounts, { id, label, dir }], app, `added ${label}`)
   }
 
+  // Signing in asks how, rather than firing the default browser flow.
+  //
+  // The default flow is the one that goes wrong quietly: if the browser is
+  // already signed in as the *other* account it authorises that one, or
+  // bounces, and you are told it worked. Naming the address up front makes the
+  // login page commit to an account, and the console/SSO paths are the ways in
+  // when the subscription flow will not cooperate.
+  async signIn(app, account) {
+    const method = await chooseFrom(app, {
+      title: `Sign in to ${account.label}`,
+      items: [
+        { value: 'email', label: 'Subscription, naming the address', hint: 'recommended' },
+        { value: 'claudeai', label: 'Subscription, let the browser choose', hint: 'the default flow' },
+        { value: 'console', label: 'Anthropic Console', hint: 'API billing, not a plan' },
+        { value: 'sso', label: 'SSO', hint: 'forces the SSO flow' },
+      ],
+    })
+    if (!method) return
+
+    const args = ['auth', 'login']
+    if (method === 'email') {
+      const email = await promptText(app, {
+        title: 'Address to sign in as',
+        label: 'Pre-fills the login page so it cannot pick the wrong account',
+        validate: (v) => (v.includes('@') ? null : 'that is not an address'),
+      })
+      if (!email) return
+      args.push('--claudeai', '--email', email)
+    } else if (method === 'claudeai') {
+      args.push('--claudeai')
+    } else if (method === 'console') {
+      args.push('--console')
+    } else if (method === 'sso') {
+      args.push('--sso')
+    }
+
+    await this.auth(app, account, args, `signing in to ${account.label}`)
+  }
+
   // Hand the terminal to `claude auth …` with this account's config dir set.
   //
   // The OAuth flow is interactive — it opens a browser and waits — so it needs
@@ -297,13 +336,20 @@ export class AccountsScreen {
       account: account.id,
       rawArgs: args,
     })
-    // Login state changed on disk; re-read rather than trusting the exit code,
-    // since the user can abandon the browser flow and claude still exits 0.
+    // Ask claude what actually happened. The exit code says nothing useful —
+    // an abandoned browser flow still exits 0 — and the credential file only
+    // says a file exists.
     this.reload(app)
+    if (args[1] !== 'login') return
     const now = Accounts.listAccounts().find((x) => x.id === account.id)
-    if (args[1] === 'login') {
-      app.toast(now?.exists ? `${account.label} signed in` : `${account.label} still not signed in`,
-        now?.exists ? undefined : S.warn)
+    const st = Accounts.authStatus(now || account)
+    if (st?.loggedIn) {
+      const who = Accounts.accountEmail(now || account)
+      app.toast(`${account.label} signed in${who ? ` as ${who}` : ''}`)
+    } else if (st) {
+      app.error(`${account.label} is still signed out — the login did not complete`)
+    } else {
+      app.error(`could not confirm ${account.label}; check with: claude auth status`)
     }
   }
 

@@ -10,6 +10,7 @@
 // leak of cl's state could expose is two directory paths.
 
 import fs from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { HOME, CLAUDE_DIR } from './paths.mjs'
 import { loadState, saveState } from './state.mjs'
@@ -104,6 +105,35 @@ export function accountEmail(account) {
   } catch { /* unreadable, huge, or not JSON */ }
   emailCache.set(file, { mtime: st.mtimeMs, email })
   return email
+}
+
+// Ask Claude Code itself whether a directory is signed in.
+//
+// The presence of .credentials.json is a guess; `claude auth status` is the
+// answer. It matters because an abandoned browser flow leaves the directory
+// looking half-configured — .claude.json written, no credential — and only
+// this can tell "never finished" from "signed in".
+//
+// Spawns a process, so it is called on demand (after a login, on refresh),
+// never from a render.
+export function authStatus(account) {
+  if (!account?.dir) return null
+  try {
+    // spawnSync, not execFileSync: `auth status` exits non-zero when signed
+    // out, and the JSON body on stdout is exactly what we need in that case.
+    const r = spawnSync('claude', ['auth', 'status'], {
+      encoding: 'utf8',
+      env: envFor(account),
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 15_000,
+    })
+    const j = JSON.parse(r.stdout || '')
+    return { loggedIn: !!j.loggedIn, method: j.authMethod || null, provider: j.apiProvider || null }
+  } catch {
+    // claude missing, slow, or output not JSON — the caller falls back to the
+    // credential-file heuristic rather than claiming anything.
+    return null
+  }
 }
 
 // Subscription tier as Claude Code recorded it, for display only. Reads a
