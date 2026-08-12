@@ -165,7 +165,7 @@ export function drawHeader(scr, { tabs = [], active = 0, right = '', alert = '',
   // Which subscription this cl is looking at. Far left, on every screen, so
   // the answer to "which account am I in" never depends on the panel.
   if (account?.label) {
-    x = scr.put(x, 0, account.label, accountStyle(account.id))
+    x = scr.put(x, 0, account.label, accountStyle(account.id, account.color))
     x = scr.put(x, 0, '  ', S.base)
   }
 

@@ -11,8 +11,8 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { S, accountStyle } from '../tui/theme.mjs'
-import { List, confirm, promptText, listMouse } from '../tui/widgets.mjs'
+import { S, accountStyle, accountColorName, ACCOUNT_COLORS } from '../tui/theme.mjs'
+import { List, confirm, promptText, chooseFrom, listMouse } from '../tui/widgets.mjs'
 import { truncate, fit, wrap } from '../tui/width.mjs'
 import { tildify, exists } from '../data/paths.mjs'
 import * as Accounts from '../data/accounts.mjs'
@@ -23,13 +23,14 @@ export class AccountsScreen {
   title = 'Accounts'
   keys = [
     ['L', 'sign in'], ['a', 'add'], ['e', 'rename'], ['d', 'directory'],
-    ['x', 'remove'], ['enter', 'launch with'], ['?', 'help'],
+    ['c', 'colour'], ['x', 'remove'], ['enter', 'launch with'], ['?', 'help'],
   ]
   help = [
     'L            sign in to this account',
     'O            sign out of it',
     'a            add an account',
     'e            rename it',
+    'c            change its colour',
     'd            change its directory',
     'x            remove it from cl',
     'enter        open Launch with this account selected',
@@ -101,7 +102,7 @@ export class AccountsScreen {
       const here = a.id === this.active?.id
       return [
         { text: here ? ' ▸ ' : '   ', style: S.accent },
-        { text: fit(a.label, Math.min(14, Math.floor(width * 0.35))), style: accountStyle(a.id) },
+        { text: fit(a.label, Math.min(14, Math.floor(width * 0.35))), style: accountStyle(a.id, a.color) },
         { text: fit(a.exists ? (Accounts.subscriptionTier(a) || 'ready') : 'not logged in', 14),
           style: a.exists ? S.muted : S.warn },
       ]
@@ -125,7 +126,7 @@ export class AccountsScreen {
     const a = item.account
     let cy = y
 
-    scr.put(x, cy, truncate(a.label, w), accountStyle(a.id)); cy++
+    scr.put(x, cy, truncate(a.label, w), accountStyle(a.id, a.color)); cy++
     scr.hline(x, cy, w, S.border); cy += 2
 
     const field = (label, value, style = S.base) => {
@@ -135,10 +136,18 @@ export class AccountsScreen {
       cy++
     }
 
+    const email = Accounts.accountEmail(a)
+    field('email', email || (a.exists ? 'unknown' : null), email ? S.base : S.dim)
+    // Two accounts reporting the same address means both directories are the
+    // same login — the setup looks right and quietly is not, so say so.
+    const clash = email && this.accounts.filter((x) => Accounts.accountEmail(x) === email).length > 1
+    if (clash) field('', 'another account signs in as this address too', S.err)
+
     field('directory', tildify(a.dir), exists(a.dir) ? S.base : S.err)
     if (!exists(a.dir)) field('', 'this directory does not exist', S.err)
     field("login", a.exists ? "signed in" : "not signed in — press L", a.exists ? S.ok : S.warn)
     field('plan', a.exists ? (Accounts.subscriptionTier(a) || 'unknown') : null)
+    field('colour', accountColorName(a.id, a.color), accountStyle(a.id, a.color))
     const n = this.sessionCount(a)
     field('sessions', n === null ? null : String(n))
     if (a.id === this.active?.id) field('in use', 'cl is reading this account', S.accent)
@@ -203,6 +212,17 @@ export class AccountsScreen {
         value: a.label, validate: (v) => (v ? null : 'a name is required'),
       })
       if (label) { this.write(this.accounts.map((x) => (x.id === a.id ? { ...x, label } : x)), app, 'renamed') }
+      return true
+    }
+    if (ev.name === 'c') {
+      const picked = await chooseFrom(app, {
+        title: `Colour for ${a.label}`,
+        current: accountColorName(a.id, a.color),
+        items: ACCOUNT_COLORS.map((name) => ({
+          value: name, label: `● ${name}`, style: accountStyle(a.id, name),
+        })),
+      })
+      if (picked) this.write(this.accounts.map((x) => (x.id === a.id ? { ...x, color: picked } : x)), app, `colour ${picked}`)
       return true
     }
     if (ev.name === 'd') {

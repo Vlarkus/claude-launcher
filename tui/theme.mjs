@@ -184,18 +184,36 @@ export function agentStyle(name) {
 // Subscription accounts. Two hues far enough apart to tell apart at a glance
 // in a header, and deliberately not the status colours: an account is a
 // setting you chose, never a state that needs attention.
+// [r, g, b, xterm256, ansi16]
 const ACCOUNT_P = {
-  max: [233, 90, 100],    // red
-  pro: [235, 155, 60],    // amber
-  other: [140, 140, 160], // anything unrecognised
+  red: [233, 90, 100, 203, 91],
+  amber: [235, 155, 60, 214, 93],
+  yellow: [230, 200, 90, 221, 93],
+  green: [140, 200, 120, 114, 92],
+  teal: [110, 200, 190, 80, 96],
+  blue: [110, 165, 240, 75, 94],
+  purple: [180, 145, 235, 141, 95],
+  pink: [230, 130, 190, 205, 95],
+  grey: [140, 140, 160, 245, 90],
 }
 
-export function accountStyle(id) {
+export const ACCOUNT_COLORS = Object.keys(ACCOUNT_P)
+
+// Defaults, so the two accounts you started with keep the colours they had
+// before any of this was customisable.
+const ACCOUNT_DEFAULT = { max: 'red', pro: 'amber' }
+
+export function accountStyle(id, color = null) {
   if (!hasColor) return ''
-  const c = ACCOUNT_P[id] || ACCOUNT_P.other
+  const name = (color && ACCOUNT_P[color]) ? color : (ACCOUNT_DEFAULT[id] || 'grey')
+  const c = ACCOUNT_P[name]
   if (depth >= 24) return `38;2;${c[0]};${c[1]};${c[2]};1`
-  if (depth >= 8) return `38;5;${id === 'max' ? 203 : id === 'pro' ? 214 : 245};1`
-  return `${id === 'max' ? 91 : id === 'pro' ? 93 : 90};1`
+  if (depth >= 8) return `38;5;${c[3]};1`
+  return `${c[4]};1`
+}
+
+export function accountColorName(id, color = null) {
+  return (color && ACCOUNT_P[color]) ? color : (ACCOUNT_DEFAULT[id] || 'grey')
 }
 
 export function statusLabel(status) {

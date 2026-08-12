@@ -33,6 +33,7 @@ export function listAccounts() {
       id: String(a.id),
       label: String(a.label || a.id),
       dir: norm(a.dir),
+      color: a.color || null,
       exists: dirUsable(norm(a.dir)),
     }))
 }
@@ -40,7 +41,9 @@ export function listAccounts() {
 export function saveAccounts(accounts) {
   const st = loadState()
   // Store the pointer only — never anything read out of the config dir.
-  st.accounts = accounts.map((a) => ({ id: a.id, label: a.label, dir: norm(a.dir) }))
+  st.accounts = accounts.map((a) => ({
+    id: a.id, label: a.label, dir: norm(a.dir), ...(a.color ? { color: a.color } : {}),
+  }))
   saveState()
   return listAccounts()
 }
@@ -76,6 +79,31 @@ export function accountById(id, accounts = listAccounts()) {
 export function envFor(account) {
   if (!account?.dir) return { ...process.env }
   return { ...process.env, CLAUDE_CONFIG_DIR: account.dir }
+}
+
+// Which Anthropic account a directory is signed in as.
+//
+// Claude Code writes .claude.json inside CLAUDE_CONFIG_DIR (verified: it
+// resolves that path from the same variable), and the address is the only way
+// to confirm the two directories really are two different accounts rather than
+// the same one twice. Read for display only — the credential file next to it
+// is never opened for this.
+const emailCache = new Map()
+
+export function accountEmail(account) {
+  const file = path.join(account?.dir || '', '.claude.json')
+  let st
+  try { st = fs.statSync(file) } catch { return null }
+  const hit = emailCache.get(file)
+  if (hit && hit.mtime === st.mtimeMs) return hit.email
+  let email = null
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const e = raw?.oauthAccount?.emailAddress
+    email = typeof e === 'string' ? e : null
+  } catch { /* unreadable, huge, or not JSON */ }
+  emailCache.set(file, { mtime: st.mtimeMs, email })
+  return email
 }
 
 // Subscription tier as Claude Code recorded it, for display only. Reads a
